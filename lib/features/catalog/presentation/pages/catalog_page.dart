@@ -49,64 +49,72 @@ class _StepCard extends ConsumerWidget {
       clipBehavior: Clip.antiAlias,
       child: InkWell(
         onTap: () => context.push('${AppRoutes.step}/${step.id}'),
-        child: Padding(
-          padding: const EdgeInsets.all(12),
-          child: Row(
-            children: [
-              _Cover(step: step),
-              const SizedBox(width: 16),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      step.nombre,
-                      style: theme.textTheme.titleLarge
-                          ?.copyWith(fontWeight: FontWeight.w600),
-                    ),
-                    const SizedBox(height: 10),
-                    _ProgressBar(best: best),
-                  ],
-                ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _Cover(step: step),
+            Padding(
+              padding: const EdgeInsets.all(14),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          step.nombre,
+                          style: theme.textTheme.titleLarge
+                              ?.copyWith(fontWeight: FontWeight.w600),
+                        ),
+                      ),
+                      const Icon(Icons.chevron_right),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  _ProgressBar(best: best),
+                ],
               ),
-              const Icon(Icons.chevron_right),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );
   }
 }
 
-/// Portada: frame del video de referencia si existe; si no, el número del paso.
+/// Portada ancha: frame del video de referencia si existe; si no, el número.
 class _Cover extends ConsumerWidget {
   const _Cover({required this.step});
   final DanceStep step;
+
+  static const double _height = 170;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     Widget number() => Container(
-          width: 64,
-          height: 64,
+          height: _height,
           color: theme.colorScheme.primaryContainer,
           alignment: Alignment.center,
           child: Text('${step.orden}',
-              style: theme.textTheme.headlineSmall
+              style: theme.textTheme.displayMedium
                   ?.copyWith(color: theme.colorScheme.onPrimaryContainer)),
         );
 
-    final cover = !step.hasVideo
-        ? number()
-        : ref.watch(stepThumbnailProvider(step.mediaUrl!)).maybeWhen(
-              data: (bytes) => bytes == null
-                  ? number()
-                  : Image.memory(bytes,
-                      width: 64, height: 64, fit: BoxFit.cover),
-              orElse: number,
-            );
+    if (!step.hasVideo) return number();
 
-    return ClipRRect(borderRadius: BorderRadius.circular(10), child: cover);
+    return ref.watch(stepThumbnailProvider(step.mediaUrl!)).maybeWhen(
+          data: (bytes) => bytes == null
+              ? number()
+              : Image.memory(bytes,
+                  height: _height, width: double.infinity, fit: BoxFit.cover),
+          orElse: () => Container(
+            height: _height,
+            color: theme.colorScheme.surfaceContainerHighest,
+            alignment: Alignment.center,
+            child: const CircularProgressIndicator(),
+          ),
+        );
   }
 }
 

@@ -42,6 +42,10 @@ service-account*.json
 /good.mov
 /ref.mov
 
+# Notas internas / referencia local (no versionar)
+/resumen.txt
+/docs/
+
 # OS
 .DS_Store
 Thumbs.db
