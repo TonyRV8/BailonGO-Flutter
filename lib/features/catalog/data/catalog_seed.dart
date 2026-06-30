@@ -1,14 +1,23 @@
 import 'models/dance_step_model.dart';
 
-/// Catálogo canónico: 9 pasos WSF nivel Bronce (plan.txt §1, doc 5.7).
+/// Pesos por feature (22 = 15 tren inferior + 7 tren superior). Cada paso elige
+/// qué landmarks importan. Ver `FeatureExtractor` para el orden de las features.
+const List<double> _legsWeights = [
+  1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, // 0–14 piernas
+  0, 0, 0, 0, 0, 0, 0, //                          15–21 brazos (ignorados)
+];
+const List<double> _armsWeights = [
+  0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, // 0–14 piernas (ignoradas)
+  1, 1, 1, 1, 1, 1, 1, //                          15–21 brazos
+];
+
+/// Catálogo canónico: 9 pasos WSF nivel Bronce (plan.txt §1, doc 5.7) + un paso
+/// de prueba. Fuente única de verdad: siembra Firestore y sirve de fallback
+/// offline.
 ///
-/// Fuente única de verdad. Sirve para:
-///   - Sembrar la colección CATALOG en Firestore (seeder dev).
-///   - Fallback offline cuando Firestore aún no tiene datos o no hay red.
-///
-/// `mediaUrl` queda `null` hasta grabar las 2 tomas por paso con la profesora
-/// (plan.txt §8, mitiga riesgo R-03). `duracionCicloSeg` es estimación inicial,
-/// se calibra al integrar el video real.
+/// `mediaUrl` queda `null` hasta grabar las 2 tomas por paso (plan.txt §8).
+/// Los 9 pasos de cumbia ponderan el tren inferior; el paso de prueba (baile de
+/// brazos) pondera el tren superior.
 const List<DanceStepModel> kCatalogSeed = [
   DanceStepModel(
     id: 'basico_adelante_atras',
@@ -18,6 +27,7 @@ const List<DanceStepModel> kCatalogSeed = [
         'el peso en la planta y el ritmo constante.',
     orden: 1,
     duracionCicloSeg: 4,
+    weights: _legsWeights,
   ),
   DanceStepModel(
     id: 'basico_guapeo',
@@ -27,6 +37,7 @@ const List<DanceStepModel> kCatalogSeed = [
         'desplazar los pies del eje.',
     orden: 2,
     duracionCicloSeg: 4,
+    weights: _legsWeights,
   ),
   DanceStepModel(
     id: 'cucaracha',
@@ -36,6 +47,7 @@ const List<DanceStepModel> kCatalogSeed = [
         'derecho, recuperando el peso al centro.',
     orden: 3,
     duracionCicloSeg: 4,
+    weights: _legsWeights,
   ),
   DanceStepModel(
     id: 'suzy_q',
@@ -45,6 +57,7 @@ const List<DanceStepModel> kCatalogSeed = [
         'rodillas coordinado.',
     orden: 4,
     duracionCicloSeg: 4,
+    weights: _legsWeights,
   ),
   DanceStepModel(
     id: 'right_spot_turn',
@@ -52,6 +65,7 @@ const List<DanceStepModel> kCatalogSeed = [
     descripcion: 'Giro a la derecha sobre el propio eje en tres tiempos.',
     orden: 5,
     duracionCicloSeg: 4,
+    weights: _legsWeights,
   ),
   DanceStepModel(
     id: 'cumbia_step',
@@ -61,6 +75,7 @@ const List<DanceStepModel> kCatalogSeed = [
         'en el pie de apoyo.',
     orden: 6,
     duracionCicloSeg: 4,
+    weights: _legsWeights,
   ),
   DanceStepModel(
     id: 'cuban_break',
@@ -70,6 +85,7 @@ const List<DanceStepModel> kCatalogSeed = [
         'cadera.',
     orden: 7,
     duracionCicloSeg: 4,
+    weights: _legsWeights,
   ),
   DanceStepModel(
     id: 'giro_punta_talon',
@@ -79,6 +95,7 @@ const List<DanceStepModel> kCatalogSeed = [
         'forma controlada.',
     orden: 8,
     duracionCicloSeg: 4,
+    weights: _legsWeights,
   ),
   DanceStepModel(
     id: 'kick_flick',
@@ -88,18 +105,19 @@ const List<DanceStepModel> kCatalogSeed = [
         'equilibrio sobre la pierna de apoyo.',
     orden: 9,
     duracionCicloSeg: 4,
+    weights: _legsWeights,
   ),
-  // Paso 10 de PRUEBA: usa el video de referencia real (ref.mov) empaquetado
-  // como asset. Sirve para validar reproducción en bucle (RF-07) y, en fases
-  // 4-5, la comparación contra good.mov / bad.mov.
+  // Paso 10 de PRUEBA: baile de brazos. Usa el video de referencia real
+  // (ref.mov) y pondera el tren superior. Valida el pipeline con good/bad.mov.
   DanceStepModel(
     id: 'paso_prueba',
     nombre: 'Paso de prueba (ref)',
     descripcion:
-        'Paso de prueba para el pipeline de evaluación. Reproduce el video de '
-        'referencia real; los intentos good/bad deben dar precisión alta/baja.',
+        'Paso de prueba para el pipeline de evaluación. Importan brazos, '
+        'hombros y manos; los intentos good/bad deben dar alta/baja precisión.',
     orden: 10,
     mediaUrl: 'assets/videos/ref.mov',
     duracionCicloSeg: 8,
+    weights: _armsWeights,
   ),
 ];

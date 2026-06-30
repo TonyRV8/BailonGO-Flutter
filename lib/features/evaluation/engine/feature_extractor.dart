@@ -2,16 +2,21 @@ import 'dart:math' as math;
 
 import '../../pose/domain/entities/pose_landmark.dart';
 
-/// Port 1:1 de `FeatureExtractor.kt` (prototipo Kotlin). Extrae un vector de 15
-/// características por fotograma a partir de los 33 landmarks BlazePose.
+/// Extrae el vector de características por fotograma a partir de los 33 landmarks
+/// BlazePose. Base portada 1:1 de `FeatureExtractor.kt` (features 0–14, tren
+/// inferior) + extensión de tren superior (15–21) para pasos donde importan
+/// brazos/hombros. La relevancia por paso se aplica luego con un vector de pesos
+/// en [DtwComparator].
 ///
-/// Todas las features se normalizan por `hipDist` (distancia entre caderas), por
-/// lo que son invariantes a escala: dan el mismo resultado con coordenadas en
-/// píxeles (ML Kit) o normalizadas 0..1 (MediaPipe). La confianza usada es
-/// `PoseLandmark.confidence` (equivalente a `visibility()` en Kotlin).
+/// Todas las features son invariantes a escala (normalizadas por `hipDist` o
+/// `shoulderDist`).
 class FeatureExtractor {
   FeatureExtractor._();
 
+  /// Número total de features del vector.
+  static const int featureCount = 22;
+
+  // Tren inferior.
   static const int _leftHip = 23;
   static const int _rightHip = 24;
   static const int _leftKnee = 25;
@@ -22,6 +27,14 @@ class FeatureExtractor {
   static const int _rightHeel = 30;
   static const int _leftFootIndex = 31;
   static const int _rightFootIndex = 32;
+
+  // Tren superior.
+  static const int _leftShoulder = 11;
+  static const int _rightShoulder = 12;
+  static const int _leftElbow = 13;
+  static const int _rightElbow = 14;
+  static const int _leftWrist = 15;
+  static const int _rightWrist = 16;
 
   static const double _minVisibility = 0.5;
   static const double _minVisibilityFeet = 0.3;
@@ -34,15 +47,15 @@ class FeatureExtractor {
     _rightAnkle,
   ];
 
-  /// Vector de 15 features (ver mapa de índices en el .kt original). Devuelve
-  /// `null` si faltan landmarks o la visibilidad crítica es insuficiente.
+  /// Vector de [featureCount] features. `null` si faltan landmarks o la
+  /// visibilidad crítica (tren inferior) es insuficiente. El tren superior no
+  /// invalida: si no es visible, sus features quedan en 0 (neutras).
   static List<double>? extractFeatures(
     List<PoseLandmark> landmarks, {
     bool isMirrored = false,
   }) {
     if (landmarks.length < 33) return null;
 
-    // Indexar por tipo (ML Kit no garantiza orden posicional).
     final lm = List<PoseLandmark?>.filled(33, null);
     for (final p in landmarks) {
       if (p.type >= 0 && p.type < 33) lm[p.type] = p;
@@ -66,6 +79,7 @@ class FeatureExtractor {
 
     final lFoot = _footFeatures(lm[_leftHeel], lm[_leftFootIndex], hipDist);
     final rFoot = _footFeatures(lm[_rightHeel], lm[_rightFootIndex], hipDist);
+    final upper = _upperFeatures(lm);
 
     final raw = <double>[
       _angleDeg(lHip, lKnee, lAnkle), // 0
@@ -83,37 +97,90 @@ class FeatureExtractor {
       rFoot.$1, // 12
       lFoot.$2, // 13
       rFoot.$2, // 14
+      ...upper, // 15–21
     ];
 
     return isMirrored ? mirrorFeatures(raw) : raw;
   }
 
-  /// Invierte el vector como si la imagen no estuviera espejada: intercambia
-  /// pares L/R y niega las features de posición X (lateralidad). Público para
-  /// que [DtwComparator] genere la variante espejada de la referencia.
+  /// Invierte el vector como si la imagen no estuviera espejada. Intercambia
+  /// pares L/R y niega las features de posición/lateralidad en X.
   static List<double> mirrorFeatures(List<double> f) {
     final m = List<double>.filled(f.length, 0);
-    m[0] = f[1]; // knee angle L↔R
+    // Tren inferior (0–14).
+    m[0] = f[1];
     m[1] = f[0];
-    m[2] = f[3]; // leg inclination cos-vertical (Y-only, solo swap)
+    m[2] = f[3];
     m[3] = f[2];
-    m[4] = f[4]; // feet distance (simétrico)
-    m[5] = f[6]; // ankle Y height L↔R
+    m[4] = f[4];
+    m[5] = f[6];
     m[6] = f[5];
-    m[7] = -f[8]; // ankle X rel hipCenter: swap + negar
+    m[7] = -f[8];
     m[8] = -f[7];
-    m[9] = -f[10]; // knee X rel hipCenter
+    m[9] = -f[10];
     m[10] = -f[9];
-    if (f.length >= 15) {
-      m[11] = -f[12]; // foot dir X
-      m[12] = -f[11];
-      m[13] = f[14]; // foot pitch Y (solo swap)
-      m[14] = f[13];
+    m[11] = -f[12];
+    m[12] = -f[11];
+    m[13] = f[14];
+    m[14] = f[13];
+    // Tren superior (15–21).
+    if (f.length >= 22) {
+      m[15] = f[16]; // arm angle L↔R
+      m[16] = f[15];
+      m[17] = -f[17]; // shoulder tilt (signo se invierte)
+      m[18] = -f[19]; // wrist X rel: swap + negar
+      m[19] = -f[18];
+      m[20] = f[21]; // wrist Y rel: solo swap
+      m[21] = f[20];
     }
     return m;
   }
 
-  /// Si talón o punta no son visibles, devuelve (0, 0) — pie "neutro".
+  /// Tren superior: ángulos de brazo, inclinación de hombros y posición de
+  /// muñecas (rel. al centro de hombros, normalizado por ancho de hombros).
+  /// Devuelve 7 valores; 0 donde no haya visibilidad suficiente.
+  static List<double> _upperFeatures(List<PoseLandmark?> lm) {
+    final lS = lm[_leftShoulder];
+    final rS = lm[_rightShoulder];
+    final lE = lm[_leftElbow];
+    final rE = lm[_rightElbow];
+    final lW = lm[_leftWrist];
+    final rW = lm[_rightWrist];
+
+    var armAngleL = 0.0, armAngleR = 0.0, shoulderTilt = 0.0;
+    var wristLX = 0.0, wristRX = 0.0, wristLY = 0.0, wristRY = 0.0;
+
+    final shouldersOk = (lS?.confidence ?? 0) >= _minVisibility &&
+        (rS?.confidence ?? 0) >= _minVisibility;
+    if (shouldersOk) {
+      final shoulderDist = _euclidean(lS!.x, lS.y, rS!.x, rS.y);
+      if (shoulderDist > 0.001) {
+        final scX = (lS.x + rS.x) / 2;
+        final scY = (lS.y + rS.y) / 2;
+        shoulderTilt = (lS.y - rS.y) / shoulderDist;
+
+        if ((lW?.confidence ?? 0) >= _minVisibility) {
+          wristLX = (lW!.x - scX) / shoulderDist;
+          wristLY = (lW.y - scY) / shoulderDist;
+        }
+        if ((rW?.confidence ?? 0) >= _minVisibility) {
+          wristRX = (rW!.x - scX) / shoulderDist;
+          wristRY = (rW.y - scY) / shoulderDist;
+        }
+        if ((lE?.confidence ?? 0) >= _minVisibility &&
+            (lW?.confidence ?? 0) >= _minVisibility) {
+          armAngleL = _angleDeg(lS, lE!, lW!);
+        }
+        if ((rE?.confidence ?? 0) >= _minVisibility &&
+            (rW?.confidence ?? 0) >= _minVisibility) {
+          armAngleR = _angleDeg(rS, rE!, rW!);
+        }
+      }
+    }
+
+    return [armAngleL, armAngleR, shoulderTilt, wristLX, wristRX, wristLY, wristRY];
+  }
+
   static (double, double) _footFeatures(
     PoseLandmark? heel,
     PoseLandmark? toe,

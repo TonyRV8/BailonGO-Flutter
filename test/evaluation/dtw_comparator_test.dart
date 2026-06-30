@@ -90,5 +90,21 @@ void main() {
       expect(r.worstComponentIndex, inInclusiveRange(0, 14));
       expect(r.componentErrors.length, 15);
     });
+
+    test('pesos: ignorar la feature que difiere sube la alineación', () {
+      final ref = makeSeq(30);
+      final user = makeSeq(30);
+      // El usuario difiere fuerte solo en la feature 0 (ángulo rodilla izq).
+      for (final fr in user) {
+        fr[0] += 60;
+      }
+      final uniform = DtwComparator.compare(user, ref);
+      final ignore0 = DtwComparator.compare(
+        user,
+        ref,
+        weights: [0, ...List.filled(14, 1.0)],
+      );
+      expect(ignore0.alignmentScore, greaterThan(uniform.alignmentScore));
+    });
   });
 }

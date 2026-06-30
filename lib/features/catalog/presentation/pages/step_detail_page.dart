@@ -59,7 +59,7 @@ class StepDetailPage extends ConsumerWidget {
                 ),
                 error: (_, __) => const Text('—'),
                 data: (score) => Text(
-                  score == null ? '—' : '${(score * 100).toStringAsFixed(0)}%',
+                  score == null ? '—' : '${score.toStringAsFixed(0)}%',
                   style: theme.textTheme.titleMedium,
                 ),
               ),
@@ -77,11 +77,11 @@ class StepDetailPage extends ConsumerWidget {
             label: const Text('Probar cámara (pose)'),
           ),
           const SizedBox(height: 8),
-          // La evaluación completa llega en la Fase 5 (RF-08+).
+          // Evaluación end-to-end (RF-08+).
           FilledButton.icon(
-            onPressed: null,
+            onPressed: () => context.push('${AppRoutes.evaluate}/${step.id}'),
             icon: const Icon(Icons.play_arrow),
-            label: const Text('Iniciar evaluación (Fase 5)'),
+            label: const Text('Iniciar evaluación'),
           ),
         ],
       ),

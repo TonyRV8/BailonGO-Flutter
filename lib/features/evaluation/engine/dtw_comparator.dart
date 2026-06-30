@@ -59,12 +59,32 @@ class DtwComparator {
     2, // 12 foot dir X
     1, // 13 foot pitch
     1, // 14 foot pitch
+    225, // 15 arm angle L
+    225, // 16 arm angle R
+    3, // 17 shoulder tilt
+    9, // 18 wrist X rel L
+    9, // 19 wrist X rel R
+    9, // 20 wrist Y rel L
+    9, // 21 wrist Y rel R
   ];
 
+  /// Construye el vector de pesos efectivo (longitud [size]). Sin pesos: todos
+  /// 1. Con pesos: usa los provistos; rellena con 1 si faltan componentes.
+  static List<double> _effectiveWeights(List<double>? weights, int size) {
+    return List<double>.generate(
+      size,
+      (i) => (weights != null && i < weights.length) ? weights[i] : 1.0,
+    );
+  }
+
+  /// [weights]: peso por feature (longitud = nº de features del paso). Las
+  /// features con peso 0 se ignoran en el costo, permitiendo ponderar landmarks
+  /// distintos por paso (piernas vs brazos). Sin pesos: todas valen igual.
   static DtwResult compare(
     List<List<double>> userFrames,
-    List<List<double>> refFrames,
-  ) {
+    List<List<double>> refFrames, {
+    List<double>? weights,
+  }) {
     if (userFrames.isEmpty || refFrames.isEmpty) {
       return const DtwResult(
         score: 0,
@@ -93,6 +113,7 @@ class DtwComparator {
         .min(uSmooth[0].length, rSmooth[0].length)
         .clamp(1, _featureRanges.length)
         .toInt();
+    final w8 = _effectiveWeights(weights, featureSize);
 
     final dtw = List.generate(n + 1, (_) => List<double>.filled(m + 1, inf));
     dtw[0][0] = 0;
@@ -108,9 +129,9 @@ class DtwComparator {
       final jHigh = math.min(m, i + w);
       for (var j = jLow; j <= jHigh; j++) {
         final cost = _normalizedEuclideanDist(
-            uSmooth[i - 1], rSmooth[j - 1], featureSize);
+            uSmooth[i - 1], rSmooth[j - 1], featureSize, w8);
         final compDist =
-            _componentDistances(uSmooth[i - 1], rSmooth[j - 1], featureSize);
+            _componentDistances(uSmooth[i - 1], rSmooth[j - 1], featureSize, w8);
 
         final c0 = dtw[i - 1][j - 1];
         final c1 = dtw[i - 1][j];
@@ -158,10 +179,10 @@ class DtwComparator {
 
     var ci = n, cj = m;
     while (ci > 0 && cj > 0) {
-      final cost =
-          _normalizedEuclideanDist(uSmooth[ci - 1], rSmooth[cj - 1], featureSize);
+      final cost = _normalizedEuclideanDist(
+          uSmooth[ci - 1], rSmooth[cj - 1], featureSize, w8);
       final mirrorCost = _normalizedEuclideanDist(
-          uSmooth[ci - 1], rMirrored[cj - 1], featureSize);
+          uSmooth[ci - 1], rMirrored[cj - 1], featureSize, w8);
 
       userFrameCostSum[ci] += cost;
       userFrameCount[ci]++;
@@ -207,8 +228,8 @@ class DtwComparator {
     }
 
     // ── Cobertura de movimiento ──────────────────────────────────────
-    final userEnergy = _motionEnergy(uSmooth, featureSize);
-    final refEnergy = _motionEnergy(rSmooth, featureSize);
+    final userEnergy = _motionEnergy(uSmooth, featureSize, w8);
+    final refEnergy = _motionEnergy(rSmooth, featureSize, w8);
     final coverageRatio =
         refEnergy > 1e-4 ? math.max(userEnergy / refEnergy, 0.0) : 1.0;
     final coverageFactor = _coverageToFactor(coverageRatio);
@@ -311,11 +332,13 @@ class DtwComparator {
     return 1 - t * (1 - _mirrorMinFactor);
   }
 
-  static double _motionEnergy(List<List<double>> frames, int featureSize) {
+  static double _motionEnergy(
+      List<List<double>> frames, int featureSize, List<double> weights) {
     if (frames.length < 2) return 0;
     var total = 0.0;
     for (var i = 1; i < frames.length; i++) {
-      total += _normalizedEuclideanDist(frames[i], frames[i - 1], featureSize);
+      total += _normalizedEuclideanDist(
+          frames[i], frames[i - 1], featureSize, weights);
     }
     return total / (frames.length - 1);
   }
@@ -344,22 +367,24 @@ class DtwComparator {
   }
 
   static double _normalizedEuclideanDist(
-      List<double> v1, List<double> v2, int size) {
+      List<double> v1, List<double> v2, int size, List<double> weights) {
     var sum = 0.0;
+    var wsum = 0.0;
     for (var i = 0; i < size; i++) {
       final range = i < _featureRanges.length ? _featureRanges[i] : 1.0;
       final diff = (v1[i] - v2[i]) / range;
-      sum += diff * diff;
+      sum += weights[i] * diff * diff;
+      wsum += weights[i];
     }
-    return math.sqrt(sum / size);
+    return wsum > 0 ? math.sqrt(sum / wsum) : 0.0;
   }
 
   static List<double> _componentDistances(
-      List<double> v1, List<double> v2, int size) {
+      List<double> v1, List<double> v2, int size, List<double> weights) {
     final len = math.min(v1.length, size);
     return List<double>.generate(len, (it) {
       final range = it < _featureRanges.length ? _featureRanges[it] : 1.0;
-      return (v1[it] - v2[it]).abs() / range;
+      return weights[it] * (v1[it] - v2[it]).abs() / range;
     });
   }
 }

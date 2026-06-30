@@ -8,6 +8,7 @@ class DanceStep {
     required this.orden,
     this.mediaUrl,
     this.duracionCicloSeg = 0,
+    this.weights = const [],
   });
 
   /// pasoId (identificador del documento en CATALOG).
@@ -23,6 +24,11 @@ class DanceStep {
 
   /// Duración de un ciclo del paso, en segundos (define la ventana de captura).
   final double duracionCicloSeg;
+
+  /// Peso por feature (longitud = nº de features) para la evaluación. Permite
+  /// que cada paso pondere landmarks distintos (piernas vs brazos). Vacío =
+  /// todas las features pesan igual.
+  final List<double> weights;
 
   bool get hasVideo => mediaUrl != null && mediaUrl!.isNotEmpty;
 

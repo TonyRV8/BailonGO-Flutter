@@ -46,3 +46,4 @@ flutter:
   uses-material-design: true
   assets:
     - assets/videos/
+    - assets/fixtures/ # ref/good/bad.mov para validar el motor (dev)

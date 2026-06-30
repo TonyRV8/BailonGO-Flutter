@@ -18,6 +18,9 @@ class AppRoutes {
   // Cámara / pose (RF-09, Fase 3): `$pose/$pasoId`.
   static const String pose = '/pose';
 
+  // Evaluación end-to-end (RF-08..11, Fase 5): `$evaluate/$pasoId`.
+  static const String evaluate = '/evaluate';
+
   /// Ruta inicial tras iniciar sesión.
   static const String home = catalog;
 }

@@ -11,6 +11,7 @@ class DanceStepModel extends DanceStep {
     required super.orden,
     super.mediaUrl,
     super.duracionCicloSeg,
+    super.weights,
   });
 
   factory DanceStepModel.fromFirestore(
@@ -24,6 +25,10 @@ class DanceStepModel extends DanceStep {
       orden: (data['orden'] as num?)?.toInt() ?? 0,
       mediaUrl: data['mediaUrl'] as String?,
       duracionCicloSeg: (data['duracionCicloSeg'] as num?)?.toDouble() ?? 0,
+      weights: (data['weights'] as List?)
+              ?.map((e) => (e as num).toDouble())
+              .toList() ??
+          const [],
     );
   }
 
@@ -34,5 +39,6 @@ class DanceStepModel extends DanceStep {
         'orden': orden,
         'mediaUrl': mediaUrl,
         'duracionCicloSeg': duracionCicloSeg,
+        'weights': weights,
       };
 }

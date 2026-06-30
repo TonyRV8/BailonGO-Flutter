@@ -40,5 +40,12 @@ class DtwResult {
     'la orientación de tu pie derecho', // 12
     'la elevación de tu pie izquierdo', // 13
     'la elevación de tu pie derecho', // 14
+    'la flexión de tu brazo izquierdo', // 15
+    'la flexión de tu brazo derecho', // 16
+    'la inclinación de tus hombros', // 17
+    'la posición lateral de tu mano izquierda', // 18
+    'la posición lateral de tu mano derecha', // 19
+    'la altura de tu mano izquierda', // 20
+    'la altura de tu mano derecha', // 21
   ];
 }

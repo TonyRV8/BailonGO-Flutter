@@ -6,6 +6,7 @@ import android.graphics.ImageFormat
 import android.graphics.Matrix
 import android.graphics.Rect
 import android.graphics.YuvImage
+import android.media.MediaMetadataRetriever
 import com.google.mediapipe.framework.image.BitmapImageBuilder
 import com.google.mediapipe.tasks.core.BaseOptions
 import com.google.mediapipe.tasks.core.Delegate
@@ -53,6 +54,24 @@ class MainActivity : FlutterActivity() {
                             result.error("DETECT_FAILED", e.message, null)
                         }
                     }
+                    "processVideo" -> {
+                        val path = call.argument<String>("path")
+                        if (path == null) {
+                            result.error("BAD_ARGS", "path requerido", null)
+                        } else {
+                            // Pesado: fuera del hilo principal, respuesta en UI.
+                            Thread {
+                                try {
+                                    val frames = processVideo(path)
+                                    runOnUiThread { result.success(frames) }
+                                } catch (e: Exception) {
+                                    runOnUiThread {
+                                        result.error("VIDEO_FAILED", e.message, null)
+                                    }
+                                }
+                            }.start()
+                        }
+                    }
                     "close" -> {
                         landmarker?.close()
                         landmarker = null
@@ -98,6 +117,66 @@ class MainActivity : FlutterActivity() {
             }
         }
         return out
+    }
+
+    /**
+     * Procesa un archivo de video con MediaPipe en modo VIDEO (porta
+     * VideoProcessor.kt del prototipo). Devuelve, por fotograma con cuerpo, un
+     * arreglo plano [x, y, z, visibility] x 33.
+     */
+    private fun processVideo(path: String): List<List<Double>> {
+        val base = BaseOptions.builder()
+            .setModelAssetPath("pose_landmarker_lite.task")
+            .setDelegate(Delegate.CPU)
+            .build()
+        val options = PoseLandmarker.PoseLandmarkerOptions.builder()
+            .setBaseOptions(base)
+            .setRunningMode(RunningMode.VIDEO)
+            .setMinPoseDetectionConfidence(0.5f)
+            .setMinPosePresenceConfidence(0.5f)
+            .setMinTrackingConfidence(0.5f)
+            .setNumPoses(1)
+            .build()
+        val lm = PoseLandmarker.createFromOptions(this, options)
+        val retriever = MediaMetadataRetriever()
+        val frames = ArrayList<List<Double>>()
+        try {
+            retriever.setDataSource(path)
+            val durationMs = retriever
+                .extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)
+                ?.toLongOrNull() ?: 0L
+            val intervalMs = 33L // ~30 fps (igual que el prototipo)
+            var ts = 0L
+            while (ts < durationMs) {
+                try {
+                    val bmp = retriever.getFrameAtTime(
+                        ts * 1000,
+                        MediaMetadataRetriever.OPTION_CLOSEST,
+                    )?.copy(Bitmap.Config.ARGB_8888, false)
+                    if (bmp != null) {
+                        val res = lm.detectForVideo(BitmapImageBuilder(bmp).build(), ts)
+                        if (res.landmarks().isNotEmpty()) {
+                            val frame = ArrayList<Double>(33 * 4)
+                            for (l in res.landmarks()[0]) {
+                                frame.add(l.x().toDouble())
+                                frame.add(l.y().toDouble())
+                                frame.add(l.z().toDouble())
+                                frame.add(l.visibility().orElse(0f).toDouble())
+                            }
+                            frames.add(frame)
+                        }
+                        bmp.recycle()
+                    }
+                } catch (_: Exception) {
+                    // Fotograma ilegible: se omite.
+                }
+                ts += intervalMs
+            }
+        } finally {
+            retriever.release()
+            lm.close()
+        }
+        return frames
     }
 
     private fun nv21ToBitmap(nv21: ByteArray, width: Int, height: Int): Bitmap? {

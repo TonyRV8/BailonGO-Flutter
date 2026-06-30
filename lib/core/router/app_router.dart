@@ -8,6 +8,7 @@ import '../../features/auth/presentation/pages/register_page.dart';
 import '../../features/auth/presentation/providers/auth_providers.dart';
 import '../../features/catalog/presentation/pages/catalog_page.dart';
 import '../../features/catalog/presentation/pages/step_detail_page.dart';
+import '../../features/evaluation/presentation/pages/evaluation_page.dart';
 import '../../features/pose/presentation/pages/pose_page.dart';
 import '../../features/profile/presentation/pages/profile_page.dart';
 import '../../features/settings/presentation/pages/settings_page.dart';
@@ -97,6 +98,13 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         parentNavigatorKey: _rootKey,
         builder: (_, state) =>
             PosePage(stepId: state.pathParameters['id']!),
+      ),
+      // Evaluación end-to-end (Fase 5).
+      GoRoute(
+        path: '${AppRoutes.evaluate}/:id',
+        parentNavigatorKey: _rootKey,
+        builder: (_, state) =>
+            EvaluationPage(stepId: state.pathParameters['id']!),
       ),
     ],
     errorBuilder: (_, state) => Scaffold(

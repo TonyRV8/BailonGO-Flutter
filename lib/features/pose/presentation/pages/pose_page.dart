@@ -39,7 +39,6 @@ class _PosePageState extends ConsumerState<PosePage>
   // RNF-05: tren inferior con baja confianza sostenida > 1 s -> inválido.
   DateTime? _lowConfSince;
   bool _bodyInvalid = false;
-  double _minLowerConf = 1.0; // DEBUG: para calibrar el umbral
 
   @override
   void initState() {
@@ -115,17 +114,15 @@ class _PosePageState extends ConsumerState<PosePage>
 
   void _evaluateConfidence(PoseFrame f) {
     var bad = !f.hasBody;
-    // DEBUG: confianza mínima del tren inferior para calibrar el umbral.
-    var minConf = 1.0;
     if (f.hasBody) {
       for (final t in PoseLandmarks.lowerBodyCritical) {
         final lm = f.byType(t);
-        final c = lm?.confidence ?? 0;
-        if (c < minConf) minConf = c;
-        if (lm == null || c < PoseLandmarks.minConfidence) bad = true;
+        if (lm == null || lm.confidence < PoseLandmarks.minConfidence) {
+          bad = true;
+          break;
+        }
       }
     }
-    _minLowerConf = minConf;
     final now = DateTime.now();
     if (bad) {
       _lowConfSince ??= now;
@@ -208,7 +205,6 @@ class _PosePageState extends ConsumerState<PosePage>
           child: _StatusBanner(
             invalid: _bodyInvalid,
             hasBody: frame?.hasBody ?? false,
-            minConf: _minLowerConf,
           ),
         ),
       ],
@@ -217,25 +213,18 @@ class _PosePageState extends ConsumerState<PosePage>
 }
 
 class _StatusBanner extends StatelessWidget {
-  const _StatusBanner({
-    required this.invalid,
-    required this.hasBody,
-    required this.minConf,
-  });
+  const _StatusBanner({required this.invalid, required this.hasBody});
 
   final bool invalid;
   final bool hasBody;
-  final double minConf;
 
   @override
   Widget build(BuildContext context) {
-    // DEBUG: confianza mínima del tren inferior, para calibrar el umbral RNF-05.
-    final dbg = ' [min conf cadera/rodilla/tobillo: ${minConf.toStringAsFixed(2)}]';
     final (color, text, icon) = invalid || !hasBody
         ? (Colors.red.shade700,
-            'Cuerpo no detectado — colócate completo a ≥ 1.4 m$dbg',
+            'Cuerpo no detectado — colócate completo a ≥ 1.4 m',
             Icons.warning_amber_rounded)
-        : (Colors.green.shade700, 'Cuerpo detectado$dbg',
+        : (Colors.green.shade700, 'Cuerpo detectado',
             Icons.check_circle_outline);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),

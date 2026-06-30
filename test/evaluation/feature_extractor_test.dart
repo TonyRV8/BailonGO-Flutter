@@ -11,7 +11,14 @@ List<PoseLandmark> standingPose({double conf = 1.0}) {
     33,
     (i) => p(i, 0.5, 0.5),
   );
-  // Tren inferior (coordenadas tipo imagen, y crece hacia abajo).
+  // Tren superior (coordenadas tipo imagen, y crece hacia abajo).
+  list[11] = p(11, 0.42, 0.30); // left shoulder
+  list[12] = p(12, 0.58, 0.30); // right shoulder
+  list[13] = p(13, 0.38, 0.42); // left elbow
+  list[14] = p(14, 0.62, 0.42); // right elbow
+  list[15] = p(15, 0.36, 0.54); // left wrist
+  list[16] = p(16, 0.64, 0.54); // right wrist
+  // Tren inferior.
   list[23] = p(23, 0.45, 0.50); // left hip
   list[24] = p(24, 0.55, 0.50); // right hip
   list[25] = p(25, 0.45, 0.70); // left knee
@@ -27,10 +34,10 @@ List<PoseLandmark> standingPose({double conf = 1.0}) {
 
 void main() {
   group('FeatureExtractor', () {
-    test('extrae vector de 15 features', () {
+    test('extrae vector de 22 features', () {
       final f = FeatureExtractor.extractFeatures(standingPose());
       expect(f, isNotNull);
-      expect(f!.length, 15);
+      expect(f!.length, FeatureExtractor.featureCount);
     });
 
     test('null si faltan landmarks', () {
