@@ -1,0 +1,34 @@
+rules_version = '2';
+
+// Reglas base para la FASE 1. El catálogo y reference_data se afinan en fases
+// posteriores. Por ahora: cada usuario solo accede a su propio documento USERS.
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // USERS: lectura/escritura solo del dueño autenticado.
+    match /users/{uid} {
+      allow read, write: if request.auth != null && request.auth.uid == uid;
+    }
+
+    // CATALOG: lectura para autenticados; escritura solo backend/admin (Fase 2).
+    match /catalog/{pasoId} {
+      allow read: if request.auth != null;
+      allow write: if false;
+    }
+
+    // REFERENCE_DATA: igual que catálogo (Fase 2+).
+    match /reference_data/{pasoId} {
+      allow read: if request.auth != null;
+      allow write: if false;
+    }
+
+    // HISTORY: cada usuario crea/lee sus propios intentos (Fase 5+).
+    match /history/{intentoId} {
+      allow read: if request.auth != null
+                  && resource.data.uid == request.auth.uid;
+      allow create: if request.auth != null
+                    && request.resource.data.uid == request.auth.uid;
+      allow update, delete: if false;
+    }
+  }
+}

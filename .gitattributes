@@ -1,0 +1,11 @@
+# Normaliza saltos de línea: LF en el repo, auto en checkout.
+* text=auto eol=lf
+
+# Binarios (no normalizar ni mostrar diff de texto).
+*.mov binary
+*.mp4 binary
+*.png binary
+*.jpg binary
+*.jks binary
+*.keystore binary
+*.task binary

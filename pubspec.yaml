@@ -1,0 +1,49 @@
+name: bailongo
+description: "BailonGO — aprendizaje y evaluación de pasos de baile (WSF Bronce) con visión por computadora."
+publish_to: "none"
+version: 0.1.0+1
+
+environment:
+  sdk: ">=3.4.0 <4.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # Firebase
+  firebase_core: ^3.6.0
+  firebase_auth: ^5.3.1
+  cloud_firestore: ^5.4.4
+  firebase_storage: ^12.3.3
+
+  # State management
+  flutter_riverpod: ^2.5.1
+
+  # Routing
+  go_router: ^14.2.7
+
+  # UI / utils
+  cupertino_icons: ^1.0.8
+
+  # Video del modelo ideal (RF-07)
+  video_player: ^2.9.1
+
+  # Fase 3 — Pose / cámara
+  camera: ^0.11.0
+  google_mlkit_pose_detection: ^0.13.0
+  permission_handler: ^11.3.1
+
+  # Fases posteriores (se activan al llegar a su fase):
+  # hive: ^2.2.3
+  # hive_flutter: ^1.1.0
+  # fl_chart: ^0.69.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^4.0.0
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/videos/

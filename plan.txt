@@ -1,0 +1,204 @@
+================================================================================
+BAILONGO — PLAN DE CONSTRUCCIÓN DE LA APP FINAL (FLUTTER)
+================================================================================
+Versión: 1.0
+Base: BailonGO_TT1_DOCUMENTACIÓN.pdf (TT1) + prototipo Android/Kotlin existente
+Objetivo: migrar/reconstruir el prototipo a la arquitectura final descrita en el
+documento, multiplataforma (Android + iOS), offline-first, con backend Firebase.
+
+--------------------------------------------------------------------------------
+0. RESUMEN DE DECISIONES (tomadas del documento, cap. 6)
+--------------------------------------------------------------------------------
+- Framework móvil .......... Flutter (Dart)            [doc 6.5]
+- Estimación de pose ....... MediaPipe BlazePose       [doc 6.1] (33 landmarks)
+- Base de datos ............ Cloud Firestore (NoSQL documental) [doc 6.2]
+- Autenticación ............ Firebase Authentication   [doc 6.2]
+- Almacenamiento media ..... Cloud Storage for Firebase[doc 4.6.3.5]
+- API Backend .............. Firebase Cloud Functions  [doc 6.4]
+- Evaluación alineación .... Distancia euclidiana ponderada por fotograma [doc 6.3.1]
+- Evaluación ritmo ......... DTW con banda Sakoe-Chiba  [doc 6.3.2]
+- Precisión total .......... 0.6*alineación + 0.4*ritmo [doc RNF-06]
+- Patrón offline-first ..... réplica local + sync bidireccional last-write-wins [doc 5.3.3]
+
+Decisiones NO fijadas por el doc (elección recomendada para este plan):
+- Gestión de estado ........ Riverpod (alternativa: Bloc)
+- Estructura ............... Clean Architecture por capas (data/domain/presentation)
+                             organizada por features.
+- Persistencia local ....... Cache nativa de Firestore (offline) + Hive/Drift solo
+                             para la cola de sync y datasets pesados de landmarks.
+- Router ................... go_router (rutas declarativas, deep-link friendly).
+
+--------------------------------------------------------------------------------
+1. ALCANCE FUNCIONAL (Requerimientos Funcionales del doc, cap. 4.1)
+--------------------------------------------------------------------------------
+MÓDULO NAVEGACIÓN Y USUARIOS
+  RF-01  Menú lateral (hamburguesa) persistente: Perfil, Catálogo, Configuración.
+  RF-02  Iniciar/cerrar sesión; ver y editar datos de perfil.
+  RF-03  Progreso: pasos "En Práctica" vs "Aprendidos".
+  RF-04  Acceso directo a evaluación desde el progreso.
+
+MÓDULO CATÁLOGO
+  RF-05  Listado completo de pasos.
+  RF-06  Ficha por paso: nombre + mejor precisión histórica.
+
+MÓDULO EVALUACIÓN Y APRENDIZAJE
+  RF-07  Video del modelo ideal en bucle.
+  RF-08  Botón "Iniciar Evaluación" + cuenta regresiva 3 s.
+  RF-09  Cámara frontal en modo espejo.
+  RF-10  Modal de resultados: ritmo, alineación, precisión total, feedback cualitativo.
+  RF-11  Controles: Salir / Siguiente paso.
+
+REGLAS CLAVE (cap. 4.2 / 4.3)
+  RNF-04 Vista espejo >= 24 FPS.
+  RNF-05 Invalidar intento si confianza de rodillas/tobillos/pies < 90% por > 1 s.
+  RNF-06 Precisión = (Ritmo*0.4) + (Alineación*0.6).
+  RNF-08 Optimizado a >= 1.4 m, dispositivo en el suelo, priorizar 12 puntos inferiores.
+  RN-04  Solo se actualiza la mejor marca si el nuevo intento la supera.
+  RN-07  La captura inicia al terminar la cuenta regresiva y dura lo que el video guía.
+
+CATÁLOGO — 9 pasos WSF nivel Bronce (doc 5.7):
+  1. Básico (adelante y atrás)   2. Básico (guapeo)      3. Cucaracha
+  4. Suzy Q                       5. Right Spot Turn      6. Cumbia Step
+  7. Cuban Break                  8. Giro punta-talón     9. Kick Flick
+
+--------------------------------------------------------------------------------
+2. MODELO DE DATOS (Firestore, doc 5.3.3 / Figura 7)
+--------------------------------------------------------------------------------
+USERS            { uid, nombre, email, fotoUrl, nivel, createdAt, settings }
+CATALOG          { pasoId, nombre, descripcion, mediaUrl(video ideal),
+                   duracionCicloSeg, orden }
+REFERENCE_DATA   { pasoId -> ref a CATALOG, landmarks: [ {frame, vector15[] } ... ] }
+HISTORY          { intentoId, uid, pasoId, scores:{ritmo, alineacion, total},
+                   deviceInfo, timestamp, synced:bool }
+GLOBAL_METRICS   { pasoId, promedios..., updatedAt }  (asíncrono, analítica)
+
+Local (réplica/offline):
+  - Cache Firestore (perfil activo, catálogo, mejor marca).
+  - Cola de intentos pendientes (synced=false) -> Hive/Drift.
+  - Cache parcial de REFERENCE_DATA del paso en curso.
+
+--------------------------------------------------------------------------------
+3. ESTRUCTURA DE CARPETAS (Flutter)
+--------------------------------------------------------------------------------
+bailongo/
+  lib/
+    main.dart
+    app.dart                      # MaterialApp + router + theme
+    core/
+      config/                     # firebase_options, constantes, env
+      theme/                      # colores, tipografía, Material 3
+      router/                     # go_router + rutas + shell del drawer
+      utils/                      # helpers, extensiones, logger
+      error/                      # Failure, excepciones
+    features/
+      auth/
+        data/    (datasources, repos impl, models)
+        domain/  (entities, repos abstract, usecases)
+        presentation/ (login, register, providers, widgets)
+      profile/
+        data/ domain/ presentation/   # perfil, editar, progreso (RF-02..04)
+      catalog/
+        data/ domain/ presentation/   # listado + ficha (RF-05, RF-06)
+      evaluation/
+        data/      # ReferenceManager, persistencia de intentos
+        domain/    # entidades Intento/Resultado, usecases
+        presentation/  # pantalla evaluación, countdown, cámara espejo, modal
+        engine/    # NÚCLEO algorítmico (portado de Kotlin):
+                   #   feature_extractor.dart  (33 landmarks -> vector 15)
+                   #   dtw_comparator.dart     (DTW Sakoe-Chiba + alineación + ritmo)
+                   #   pose_smoothing.dart
+      pose/        # Módulo de Adquisición de Landmarks (doc 5.3.2)
+        pose_landmarker.dart       # interfaz abstracta (desacopla origen de datos)
+        mediapipe_pose_landmarker.dart  # impl vía platform channel / plugin
+    sync/                          # motor offline-first (cola + last-write-wins)
+    shared/                        # widgets reutilizables, modelos comunes
+  android/  ios/                   # código nativo MediaPipe (platform channels)
+  assets/   test/
+
+--------------------------------------------------------------------------------
+4. MÓDULO DE POSE (puente nativo, doc 5.3.2 / 6.1)
+--------------------------------------------------------------------------------
+- Definir interfaz Dart `PoseLandmarker` (entrada: frame; salida: 33 landmarks +
+  confianza por punto). Mantiene el módulo de evaluación desacoplado del origen.
+- Implementación vía Platform Channels que envuelve MediaPipe Tasks Vision:
+    Android: com.google.mediapipe:tasks-vision (modelo pose_landmarker.task)
+    iOS:     MediaPipeTasksVision (CocoaPods)
+- Evaluar primero plugins comunitarios de Flutter para MediaPipe; si no cumplen
+  rendimiento/FPS (RNF-04), implementar el channel propio.
+- Reutilizar configuración de modelos del prototipo: lite / full / heavy.
+
+--------------------------------------------------------------------------------
+5. PORTABILIDAD DEL MOTOR DE EVALUACIÓN (reutilizar lo ya hecho)
+--------------------------------------------------------------------------------
+El prototipo Kotlin ya tiene resuelto el núcleo. Portar a Dart 1:1:
+  - FeatureExtractor.kt  -> feature_extractor.dart  (vector 15 dims, mirrorFeatures)
+  - DTWComparator.kt     -> dtw_comparator.dart      (banda 12%, segmentos,
+                            cobertura, espejo, mapeos costo->score)
+  - Conservar TODOS los `const val` de ajuste como constantes Dart.
+  - Pruebas: capturar mismas secuencias en Kotlin y Dart y verificar que los
+    puntajes coincidan dentro de tolerancia (test de regresión del algoritmo).
+
+--------------------------------------------------------------------------------
+6. FASES DE CONSTRUCCIÓN (orden recomendado)
+--------------------------------------------------------------------------------
+FASE 1 — Cimientos (PRIMERA PARTE, ver prompt aparte)
+  - Proyecto Flutter + dependencias + tema Material 3 + go_router.
+  - Integración Firebase (Auth, Firestore, Storage) con firebase_options.
+  - Shell de navegación: Scaffold con Drawer (RF-01) y rutas placeholder
+    (Perfil / Catálogo / Configuración).
+  - Módulo Auth completo: login + registro (email/contraseña), guardas de ruta,
+    persistencia de sesión, logout. (Google/Facebook se dejan para fase posterior.)
+  - Entidad User + repos + providers (Riverpod).
+  Entregable: app que arranca, registra/inicia sesión y navega entre secciones vacías.
+
+FASE 2 — Catálogo + datos
+  - Modelo de datos Firestore (USERS, CATALOG, REFERENCE_DATA).
+  - Carga de los 9 pasos (seed) + pantalla de catálogo (RF-05/06) con mejor marca.
+  - Ficha de paso + reproducción del video ideal en bucle (RF-07).
+  - Cache offline del catálogo.
+
+FASE 3 — Módulo de Pose
+  - Platform channel MediaPipe (Android primero), interfaz PoseLandmarker.
+  - Preview de cámara frontal en modo espejo (RF-09) con overlay de skeleton.
+  - Validación de confianza/encuadre (RNF-05) + alerta "Cuerpo no detectado".
+
+FASE 4 — Motor de evaluación
+  - Portar FeatureExtractor + DTWComparator a Dart (sección 5).
+  - Tests de regresión contra el prototipo Kotlin.
+
+FASE 5 — Flujo de evaluación end-to-end
+  - Pantalla evaluación: countdown 3 s (RF-08), grabación sincronizada (RN-07),
+    extracción en vivo de landmarks, comparación con referencia.
+  - Modal de resultados (RF-10): ritmo/alineación/total + feedback cualitativo.
+  - Controles Salir / Siguiente paso (RF-11).
+  - Guardado de intento local + actualización de mejor marca (RN-04).
+
+FASE 6 — Perfil y progreso
+  - Pantalla de perfil + editar perfil (RF-02), foto, progreso (RF-03/04).
+  - Clasificación "Aprendido" / "En Práctica" (RN-02/03, umbral configurable).
+
+FASE 7 — Offline-first y sincronización
+  - Cola de intentos pendientes + motor de sync bidireccional (doc 5.3.3.2).
+  - Resolución de conflictos last-write-wins; bitácora de sync reanudable.
+  - (Opcional) Cloud Functions para métricas globales y validaciones servidor.
+
+FASE 8 — Pulido
+  - OAuth Google/Facebook, configuración, accesibilidad, manejo de errores,
+    pruebas en 3 perfiles de hardware (gama alta/media/baja), latencia/FPS.
+
+--------------------------------------------------------------------------------
+7. DEPENDENCIAS INICIALES (pubspec, fase 1)
+--------------------------------------------------------------------------------
+  firebase_core, firebase_auth, cloud_firestore, firebase_storage
+  flutter_riverpod
+  go_router
+  (después) camera, video_player, hive/drift, fl_chart (progreso)
+
+--------------------------------------------------------------------------------
+8. NOTAS / PENDIENTES POR DEFINIR
+--------------------------------------------------------------------------------
+  - Umbral de "Paso Aprendido" (RN-02): pendiente de calibrar con el algoritmo.
+  - Confirmar plugin MediaPipe vs platform channel propio (medir FPS real).
+  - Grabar 2 tomas por paso con la profesora (mitiga riesgo R-03 del doc).
+  - Estrategia de privacidad: procesar video on-device, guardar solo métricas (R-10).
+================================================================================

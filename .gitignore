@@ -1,0 +1,47 @@
+# Flutter / Dart
+.dart_tool/
+.packages
+build/
+.pub-cache/
+.pub/
+pubspec.lock
+.flutter-plugins
+.flutter-plugins-dependencies
+
+# IDE
+.idea/
+.vscode/
+*.iml
+
+# Firebase (NO subir credenciales)
+google-services.json
+GoogleService-Info.plist
+firebase_app_id_file.json
+# Nota: lib/core/config/firebase_options.dart lo genera `flutterfire configure`.
+# Decide en tu equipo si lo versionas (no contiene secretos sensibles, pero
+# expone identificadores del proyecto).
+
+# Firma de release (NUNCA subir) — aparecen al firmar el APK/IPA
+**/key.properties
+*.jks
+*.keystore
+*.p12
+*.p8
+*.mobileprovision
+
+# Credenciales de servidor (Cloud Functions / admin, fases futuras)
+*serviceAccount*.json
+service-account*.json
+*.pem
+.env
+.env.*
+
+# Videos de prueba duplicados en la raíz (las copias canónicas viven en
+# assets/videos y assets/fixtures). Se mantienen en disco, fuera del repo.
+/bad.mov
+/good.mov
+/ref.mov
+
+# OS
+.DS_Store
+Thumbs.db
