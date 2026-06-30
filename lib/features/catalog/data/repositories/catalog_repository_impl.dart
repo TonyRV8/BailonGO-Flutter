@@ -29,5 +29,9 @@ class CatalogRepositoryImpl implements CatalogRepository {
       _remote.bestScoreFor(uid: uid, pasoId: pasoId);
 
   @override
+  Future<Map<String, double>> bestScoresForUser(String uid) =>
+      _remote.bestScoresForUser(uid);
+
+  @override
   Future<void> seedCatalog() => _remote.seedCatalog();
 }

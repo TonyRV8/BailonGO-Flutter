@@ -30,24 +30,37 @@ class CatalogRemoteDataSource {
   }
 
   /// Mejor precisión histórica del usuario en un paso (RF-06 / RN-04).
-  /// Devuelve `null` si aún no hay intentos.
+  /// Devuelve `null` si aún no hay intentos. Filtra solo por `uid` (campo único,
+  /// auto-indexado) y calcula el máximo en cliente para no requerir un índice
+  /// compuesto de Firestore.
   Future<double?> bestScoreFor({
     required String uid,
     required String pasoId,
   }) async {
+    final all = await bestScoresForUser(uid);
+    return all[pasoId];
+  }
+
+  /// Mejor precisión por paso para un usuario (mapa pasoId → total). Una sola
+  /// lectura de HISTORY filtrando por `uid`.
+  Future<Map<String, double>> bestScoresForUser(String uid) async {
     try {
-      final snap = await _history
-          .where('uid', isEqualTo: uid)
-          .where('pasoId', isEqualTo: pasoId)
-          .orderBy('scores.total', descending: true)
-          .limit(1)
-          .get();
-      if (snap.docs.isEmpty) return null;
-      final scores = snap.docs.first.data()['scores'] as Map<String, dynamic>?;
-      return (scores?['total'] as num?)?.toDouble();
+      final snap = await _history.where('uid', isEqualTo: uid).get();
+      final best = <String, double>{};
+      for (final doc in snap.docs) {
+        final data = doc.data();
+        final pasoId = data['pasoId'] as String?;
+        if (pasoId == null) continue;
+        final total =
+            ((data['scores'] as Map<String, dynamic>?)?['total'] as num?)
+                ?.toDouble();
+        if (total == null) continue;
+        final current = best[pasoId];
+        if (current == null || total > current) best[pasoId] = total;
+      }
+      return best;
     } catch (_) {
-      // Sin red o índice ausente: degradar a "sin marca" (offline-first).
-      return null;
+      return const {};
     }
   }
 

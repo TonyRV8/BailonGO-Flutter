@@ -72,6 +72,23 @@ class MainActivity : FlutterActivity() {
                             }.start()
                         }
                     }
+                    "videoThumbnail" -> {
+                        val path = call.argument<String>("path")
+                        if (path == null) {
+                            result.error("BAD_ARGS", "path requerido", null)
+                        } else {
+                            Thread {
+                                try {
+                                    val bytes = videoThumbnail(path)
+                                    runOnUiThread { result.success(bytes) }
+                                } catch (e: Exception) {
+                                    runOnUiThread {
+                                        result.error("THUMB_FAILED", e.message, null)
+                                    }
+                                }
+                            }.start()
+                        }
+                    }
                     "close" -> {
                         landmarker?.close()
                         landmarker = null
@@ -177,6 +194,29 @@ class MainActivity : FlutterActivity() {
             lm.close()
         }
         return frames
+    }
+
+    /// Frame del centro del video como JPEG, para usar de portada en el catálogo.
+    private fun videoThumbnail(path: String): ByteArray? {
+        val retriever = MediaMetadataRetriever()
+        return try {
+            retriever.setDataSource(path)
+            val durationMs = retriever
+                .extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)
+                ?.toLongOrNull() ?: 0L
+            val bmp = retriever.getFrameAtTime(
+                (durationMs / 2) * 1000,
+                MediaMetadataRetriever.OPTION_CLOSEST,
+            ) ?: return null
+            val out = ByteArrayOutputStream()
+            bmp.compress(Bitmap.CompressFormat.JPEG, 80, out)
+            bmp.recycle()
+            out.toByteArray()
+        } catch (e: Exception) {
+            null
+        } finally {
+            retriever.release()
+        }
     }
 
     private fun nv21ToBitmap(nv21: ByteArray, width: Int, height: Int): Bitmap? {

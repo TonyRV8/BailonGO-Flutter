@@ -65,6 +65,18 @@ class HomeShell extends ConsumerWidget {
         ],
       ),
       body: child,
+      // Menú inferior persistente (RF-01), espejo del drawer.
+      bottomNavigationBar: NavigationBar(
+        selectedIndex: _selectedIndex,
+        onDestinationSelected: (i) => context.go(_items[i].path),
+        destinations: [
+          for (final item in _items)
+            NavigationDestination(
+              icon: Icon(item.icon),
+              label: item.label,
+            ),
+        ],
+      ),
     );
   }
 }

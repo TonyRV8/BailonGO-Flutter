@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../core/router/app_routes.dart';
+import '../../domain/entities/dance_step.dart';
 import '../providers/catalog_providers.dart';
 
 /// Listado completo de los 9 pasos WSF Bronce (RF-05).
@@ -20,30 +21,125 @@ class CatalogPage extends ConsumerWidget {
         onRetry: () => ref.invalidate(catalogProvider),
       ),
       data: (steps) => RefreshIndicator(
-        onRefresh: () async => ref.invalidate(catalogProvider),
+        onRefresh: () async {
+          ref.invalidate(catalogProvider);
+          ref.invalidate(userBestScoresProvider);
+        },
         child: ListView.separated(
           padding: const EdgeInsets.all(12),
           itemCount: steps.length,
-          separatorBuilder: (_, __) => const SizedBox(height: 8),
-          itemBuilder: (context, i) {
-            final step = steps[i];
-            return Card(
-              clipBehavior: Clip.antiAlias,
-              child: ListTile(
-                leading: CircleAvatar(child: Text('${step.orden}')),
-                title: Text(step.nombre),
-                subtitle: Text(
-                  step.descripcion,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                trailing: const Icon(Icons.chevron_right),
-                onTap: () => context.push('${AppRoutes.step}/${step.id}'),
-              ),
-            );
-          },
+          separatorBuilder: (_, __) => const SizedBox(height: 12),
+          itemBuilder: (context, i) => _StepCard(step: steps[i]),
         ),
       ),
+    );
+  }
+}
+
+class _StepCard extends ConsumerWidget {
+  const _StepCard({required this.step});
+  final DanceStep step;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    final best = ref.watch(userBestScoresProvider).value?[step.id];
+
+    return Card(
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: () => context.push('${AppRoutes.step}/${step.id}'),
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Row(
+            children: [
+              _Cover(step: step),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      step.nombre,
+                      style: theme.textTheme.titleLarge
+                          ?.copyWith(fontWeight: FontWeight.w600),
+                    ),
+                    const SizedBox(height: 10),
+                    _ProgressBar(best: best),
+                  ],
+                ),
+              ),
+              const Icon(Icons.chevron_right),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Portada: frame del video de referencia si existe; si no, el número del paso.
+class _Cover extends ConsumerWidget {
+  const _Cover({required this.step});
+  final DanceStep step;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = Theme.of(context);
+    Widget number() => Container(
+          width: 64,
+          height: 64,
+          color: theme.colorScheme.primaryContainer,
+          alignment: Alignment.center,
+          child: Text('${step.orden}',
+              style: theme.textTheme.headlineSmall
+                  ?.copyWith(color: theme.colorScheme.onPrimaryContainer)),
+        );
+
+    final cover = !step.hasVideo
+        ? number()
+        : ref.watch(stepThumbnailProvider(step.mediaUrl!)).maybeWhen(
+              data: (bytes) => bytes == null
+                  ? number()
+                  : Image.memory(bytes,
+                      width: 64, height: 64, fit: BoxFit.cover),
+              orElse: number,
+            );
+
+    return ClipRRect(borderRadius: BorderRadius.circular(10), child: cover);
+  }
+}
+
+class _ProgressBar extends StatelessWidget {
+  const _ProgressBar({this.best});
+  final double? best;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final b = best;
+    final value = (b ?? 0) / 100;
+    final color = b == null
+        ? theme.colorScheme.outline
+        : (b >= 80 ? Colors.green : Colors.orange);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        ClipRRect(
+          borderRadius: BorderRadius.circular(6),
+          child: LinearProgressIndicator(
+            value: value,
+            minHeight: 10,
+            backgroundColor: theme.colorScheme.surfaceContainerHighest,
+            color: color,
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          b == null ? 'Sin intentos' : 'Mejor: ${b.toStringAsFixed(0)}%',
+          style: theme.textTheme.bodyMedium,
+        ),
+      ],
     );
   }
 }
