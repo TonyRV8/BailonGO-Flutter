@@ -19,17 +19,19 @@ class PoseLandmarks {
   static const int leftFootIndex = 31;
   static const int rightFootIndex = 32;
 
-  /// Rodillas, tobillos y pies: si su confianza cae < 0.90 por > 1 s, el
-  /// intento se invalida (RNF-05).
+  /// Gate de validación (RNF-05): caderas, rodillas y tobillos. Si su confianza
+  /// cae bajo [minConfidence] por > 1 s, el intento se invalida.
+  ///
+  /// Coincide con `CRITICAL_INDICES` del prototipo Kotlin. Los pies (talones y
+  /// puntas) NO entran al gate duro: su visibilidad es naturalmente baja
+  /// (prototipo usa 0.3) y su ausencia solo produce features de pie "neutras".
   static const List<int> lowerBodyCritical = [
+    leftHip,
+    rightHip,
     leftKnee,
     rightKnee,
     leftAnkle,
     rightAnkle,
-    leftHeel,
-    rightHeel,
-    leftFootIndex,
-    rightFootIndex,
   ];
 
   /// Conexiones del esqueleto para dibujar el overlay (pares de índices).
@@ -50,6 +52,7 @@ class PoseLandmarks {
     [rightAnkle, rightFootIndex],
   ];
 
-  /// Umbral de confianza (RNF-05).
-  static const double minConfidence = 0.90;
+  /// Umbral de confianza del gate (alineado al prototipo Kotlin:
+  /// MIN_VISIBILITY = 0.5 para cadera/rodilla/tobillo).
+  static const double minConfidence = 0.5;
 }

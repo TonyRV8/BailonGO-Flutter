@@ -1,13 +1,11 @@
-import 'dart:io' show Platform;
-
 import 'package:flutter/material.dart';
 
 import '../../domain/entities/pose_frame.dart';
 import '../../domain/pose_landmarks.dart';
 
-/// Dibuja el esqueleto sobre la preview de la cámara (RF-09). El mapeo de
-/// coordenadas imagen->canvas sigue el patrón oficial de google_mlkit_example
-/// (maneja rotación y espejo de cámara frontal).
+/// Dibuja el esqueleto sobre la preview (RF-09). MediaPipe devuelve coords
+/// normalizadas 0..1 sobre la imagen ya vertical, así que el mapeo es directo;
+/// para cámara frontal se espeja en X.
 class PosePainter extends CustomPainter {
   PosePainter({required this.frame, required this.isFront});
 
@@ -33,10 +31,8 @@ class PosePainter extends CustomPainter {
     Offset? at(int type) {
       final lm = frame.byType(type);
       if (lm == null) return null;
-      return Offset(
-        _translateX(lm.x, size),
-        _translateY(lm.y, size),
-      );
+      final x = isFront ? (1.0 - lm.x) : lm.x;
+      return Offset(x * size.width, lm.y * size.height);
     }
 
     // Huesos.
@@ -48,37 +44,11 @@ class PosePainter extends CustomPainter {
 
     // Puntos (rojo si es crítico y de baja confianza, RNF-05).
     for (final lm in frame.landmarks) {
-      final p = Offset(_translateX(lm.x, size), _translateY(lm.y, size));
+      final x = isFront ? (1.0 - lm.x) : lm.x;
+      final p = Offset(x * size.width, lm.y * size.height);
       final isCritLow = PoseLandmarks.lowerBodyCritical.contains(lm.type) &&
           lm.confidence < PoseLandmarks.minConfidence;
       canvas.drawCircle(p, 3, isCritLow ? critPaint : pointPaint);
-    }
-  }
-
-  double _imgW() =>
-      Platform.isIOS ? frame.imageSize.width : frame.imageSize.height;
-  double _imgH() =>
-      Platform.isIOS ? frame.imageSize.height : frame.imageSize.width;
-
-  double _translateX(double x, Size canvas) {
-    switch (frame.rotationDegrees) {
-      case 90:
-        return x * canvas.width / _imgW();
-      case 270:
-        return canvas.width - x * canvas.width / _imgW();
-      default: // 0 / 180
-        final v = x * canvas.width / frame.imageSize.width;
-        return isFront ? canvas.width - v : v;
-    }
-  }
-
-  double _translateY(double y, Size canvas) {
-    switch (frame.rotationDegrees) {
-      case 90:
-      case 270:
-        return y * canvas.height / _imgH();
-      default: // 0 / 180
-        return y * canvas.height / frame.imageSize.height;
     }
   }
 

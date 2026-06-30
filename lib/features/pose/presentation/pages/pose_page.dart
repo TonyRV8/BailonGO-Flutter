@@ -39,6 +39,7 @@ class _PosePageState extends ConsumerState<PosePage>
   // RNF-05: tren inferior con baja confianza sostenida > 1 s -> inválido.
   DateTime? _lowConfSince;
   bool _bodyInvalid = false;
+  double _minLowerConf = 1.0; // DEBUG: para calibrar el umbral
 
   @override
   void initState() {
@@ -72,6 +73,7 @@ class _PosePageState extends ConsumerState<PosePage>
       _controller = controller;
       await controller.initialize();
       await controller.lockCaptureOrientation(DeviceOrientation.portraitUp);
+      await ref.read(poseLandmarkerProvider).initialize();
       await controller.startImageStream(_onImage);
       if (mounted) setState(() => _status = _Status.running);
     } catch (e) {
@@ -90,13 +92,18 @@ class _PosePageState extends ConsumerState<PosePage>
     if (camera == null) return;
     _busy = true;
     try {
-      final input = inputImageFromCameraImage(
+      final data = cameraFrameFromImage(
         image: image,
         camera: camera,
         deviceOrientation: DeviceOrientation.portraitUp,
       );
-      if (input == null) return;
-      final frame = await ref.read(poseLandmarkerProvider).detect(input);
+      if (data == null) return;
+      final frame = await ref.read(poseLandmarkerProvider).detect(
+            nv21: data.nv21,
+            width: data.width,
+            height: data.height,
+            rotationDegrees: data.rotationDegrees,
+          );
       _evaluateConfidence(frame);
       if (mounted) setState(() => _frame = frame);
     } catch (_) {
@@ -108,15 +115,17 @@ class _PosePageState extends ConsumerState<PosePage>
 
   void _evaluateConfidence(PoseFrame f) {
     var bad = !f.hasBody;
-    if (!bad) {
+    // DEBUG: confianza mínima del tren inferior para calibrar el umbral.
+    var minConf = 1.0;
+    if (f.hasBody) {
       for (final t in PoseLandmarks.lowerBodyCritical) {
         final lm = f.byType(t);
-        if (lm == null || lm.confidence < PoseLandmarks.minConfidence) {
-          bad = true;
-          break;
-        }
+        final c = lm?.confidence ?? 0;
+        if (c < minConf) minConf = c;
+        if (lm == null || c < PoseLandmarks.minConfidence) bad = true;
       }
     }
+    _minLowerConf = minConf;
     final now = DateTime.now();
     if (bad) {
       _lowConfSince ??= now;
@@ -199,6 +208,7 @@ class _PosePageState extends ConsumerState<PosePage>
           child: _StatusBanner(
             invalid: _bodyInvalid,
             hasBody: frame?.hasBody ?? false,
+            minConf: _minLowerConf,
           ),
         ),
       ],
@@ -207,17 +217,26 @@ class _PosePageState extends ConsumerState<PosePage>
 }
 
 class _StatusBanner extends StatelessWidget {
-  const _StatusBanner({required this.invalid, required this.hasBody});
+  const _StatusBanner({
+    required this.invalid,
+    required this.hasBody,
+    required this.minConf,
+  });
 
   final bool invalid;
   final bool hasBody;
+  final double minConf;
 
   @override
   Widget build(BuildContext context) {
+    // DEBUG: confianza mínima del tren inferior, para calibrar el umbral RNF-05.
+    final dbg = ' [min conf cadera/rodilla/tobillo: ${minConf.toStringAsFixed(2)}]';
     final (color, text, icon) = invalid || !hasBody
-        ? (Colors.red.shade700, 'Cuerpo no detectado — colócate completo a ≥ 1.4 m',
+        ? (Colors.red.shade700,
+            'Cuerpo no detectado — colócate completo a ≥ 1.4 m$dbg',
             Icons.warning_amber_rounded)
-        : (Colors.green.shade700, 'Cuerpo detectado', Icons.check_circle_outline);
+        : (Colors.green.shade700, 'Cuerpo detectado$dbg',
+            Icons.check_circle_outline);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(

@@ -28,9 +28,8 @@ dependencies:
   # Video del modelo ideal (RF-07)
   video_player: ^2.9.1
 
-  # Fase 3 — Pose / cámara
+  # Fase 3 — Pose / cámara (MediaPipe vía platform channel nativo)
   camera: ^0.11.0
-  google_mlkit_pose_detection: ^0.13.0
   permission_handler: ^11.3.1
 
   # Fases posteriores (se activan al llegar a su fase):

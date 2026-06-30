@@ -17,12 +17,18 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
 
+    // MediaPipe carga el modelo .task por memory-mapping: no debe comprimirse.
+    androidResources {
+        noCompress.add("task")
+    }
+
     defaultConfig {
         // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
         applicationId = "com.bailongo.bailongo"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
-        minSdk = flutter.minSdkVersion
+        // MediaPipe Tasks Vision exige minSdk 24.
+        minSdk = maxOf(flutter.minSdkVersion, 24)
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
@@ -45,4 +51,9 @@ kotlin {
 
 flutter {
     source = "../.."
+}
+
+dependencies {
+    // MediaPipe Tasks Vision: PoseLandmarker (BlazePose, 33 landmarks).
+    implementation("com.google.mediapipe:tasks-vision:0.10.14")
 }

@@ -1,9 +1,8 @@
 import 'dart:io' show Platform;
-import 'dart:ui' show Size;
+import 'dart:typed_data';
 
 import 'package:camera/camera.dart';
 import 'package:flutter/services.dart' show DeviceOrientation;
-import 'package:google_mlkit_pose_detection/google_mlkit_pose_detection.dart';
 
 const _orientations = {
   DeviceOrientation.portraitUp: 0,
@@ -12,49 +11,50 @@ const _orientations = {
   DeviceOrientation.landscapeRight: 270,
 };
 
-/// Convierte un [CameraImage] del plugin `camera` en el [InputImage] que ML Kit
-/// necesita, calculando la rotación según el sensor y la orientación del
-/// dispositivo. Devuelve `null` si el formato no es el esperado.
+/// Fotograma listo para MediaPipe: bytes NV21 + dimensiones + rotación a aplicar
+/// para enderezar la imagen.
+class CameraFrameData {
+  const CameraFrameData({
+    required this.nv21,
+    required this.width,
+    required this.height,
+    required this.rotationDegrees,
+  });
+
+  final Uint8List nv21;
+  final int width;
+  final int height;
+  final int rotationDegrees;
+}
+
+/// Extrae los bytes NV21 de un [CameraImage] y calcula la rotación según el
+/// sensor y la orientación del dispositivo. Devuelve `null` si el formato no es
+/// NV21 de un solo plano.
 ///
-/// Requiere inicializar la cámara con `imageFormatGroup`:
-///   Android -> ImageFormatGroup.nv21   (un solo plano)
-///   iOS     -> ImageFormatGroup.bgra8888
-InputImage? inputImageFromCameraImage({
+/// Requiere inicializar la cámara con `ImageFormatGroup.nv21` (Android).
+CameraFrameData? cameraFrameFromImage({
   required CameraImage image,
   required CameraDescription camera,
   required DeviceOrientation deviceOrientation,
 }) {
-  final sensorOrientation = camera.sensorOrientation;
+  if (image.planes.length != 1) return null; // se espera NV21 empaquetado
 
-  InputImageRotation? rotation;
+  final sensorOrientation = camera.sensorOrientation;
+  final int rotation;
   if (Platform.isIOS) {
-    rotation = InputImageRotationValue.fromRawValue(sensorOrientation);
+    rotation = sensorOrientation;
   } else {
     final compensation = _orientations[deviceOrientation];
     if (compensation == null) return null;
-    final raw = camera.lensDirection == CameraLensDirection.front
+    rotation = camera.lensDirection == CameraLensDirection.front
         ? (sensorOrientation + compensation) % 360
         : (sensorOrientation - compensation + 360) % 360;
-    rotation = InputImageRotationValue.fromRawValue(raw);
   }
-  if (rotation == null) return null;
 
-  final format = InputImageFormatValue.fromRawValue(image.format.raw);
-  if (format == null ||
-      (Platform.isAndroid && format != InputImageFormat.nv21) ||
-      (Platform.isIOS && format != InputImageFormat.bgra8888)) {
-    return null;
-  }
-  if (image.planes.length != 1) return null;
-  final plane = image.planes.first;
-
-  return InputImage.fromBytes(
-    bytes: plane.bytes,
-    metadata: InputImageMetadata(
-      size: Size(image.width.toDouble(), image.height.toDouble()),
-      rotation: rotation,
-      format: format,
-      bytesPerRow: plane.bytesPerRow,
-    ),
+  return CameraFrameData(
+    nv21: image.planes.first.bytes,
+    width: image.width,
+    height: image.height,
+    rotationDegrees: rotation,
   );
 }
