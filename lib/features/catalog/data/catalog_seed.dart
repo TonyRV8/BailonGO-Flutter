@@ -120,4 +120,33 @@ const List<DanceStepModel> kCatalogSeed = [
     duracionCicloSeg: 8,
     weights: _armsWeights,
   ),
+  // Pasos 11 y 12: copias del paso de prueba para testear la sincronización
+  // de la mejor marca (history) por paso. TEMPORALES: quitar junto con
+  // paso_prueba al sembrar los pasos reales.
+  DanceStepModel(
+    id: 'paso_prueba_2',
+    nombre: 'Paso de prueba 2 (ref)',
+    descripcion:
+        'Copia del paso de prueba para testear la sincronización del mejor '
+        'intento. Importan brazos, hombros y manos.',
+    orden: 11,
+    mediaUrl: 'assets/videos/ref.mov',
+    duracionCicloSeg: 8,
+    weights: _armsWeights,
+  ),
+  DanceStepModel(
+    id: 'paso_prueba_3',
+    nombre: 'Paso de prueba 3 (ref)',
+    descripcion:
+        'Copia del paso de prueba para testear la sincronización del mejor '
+        'intento. Importan brazos, hombros y manos.',
+    orden: 12,
+    mediaUrl: 'assets/videos/ref.mov',
+    duracionCicloSeg: 8,
+    weights: _armsWeights,
+  ),
 ];
+
+/// Ids de los pasos de prueba (para dev tools: subir referencia / borrar
+/// progreso). TEMPORAL.
+const List<String> kTestStepIds = ['paso_prueba', 'paso_prueba_2', 'paso_prueba_3'];

@@ -44,6 +44,10 @@ service-account*.json
 
 # Notas internas / referencia local (no versionar)
 /resumen.txt
+/resumen2.txt
+/resumen3.txt
+/storages.rules
+/firestore.rules
 /docs/
 
 # OS

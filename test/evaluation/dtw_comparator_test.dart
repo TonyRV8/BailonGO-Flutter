@@ -37,6 +37,49 @@ void main() {
       expect(r.alignmentScore, 100);
       expect(r.rhythmScore, 100);
       expect(r.normalizedCost, lessThan(1e-6));
+      expect(r.segmentScore, [100, 100, 100]);
+      for (final t in r.segmentTempo) {
+        expect(t.abs(), lessThan(0.02));
+      }
+    });
+
+    test('usuario adelantado -> tempo señado positivo', () {
+      final ref = makeSeq(40);
+      // El usuario ejecuta en cada frame la pose que en la referencia llega
+      // después (fase adelantada) -> el path se desvía hacia j > idealJ.
+      final ahead = makeSeq(40, phase: 0.9);
+      final r = DtwComparator.compare(ahead, ref);
+      final meanTempo =
+          r.segmentTempo.reduce((a, b) => a + b) / r.segmentTempo.length;
+      expect(meanTempo, greaterThan(0));
+    });
+
+    test('desglose por segmento: dimensiones y consistencia', () {
+      final ref = makeSeq(40);
+      final user = makeSeq(40, offset: 8, phase: 0.3);
+      final r = DtwComparator.compare(user, ref);
+      expect(r.segmentScore.length, 3);
+      expect(r.segmentTempo.length, 3);
+      expect(r.segmentComponentErrors.length, 3);
+      expect(r.segmentSignedErrors.length, 3);
+      for (var s = 0; s < 3; s++) {
+        expect(r.segmentComponentErrors[s].length, 15);
+        expect(r.segmentSignedErrors[s].length, 15);
+        // Precisión del segmento = RNF-06 sobre los scores del segmento.
+        final expected =
+            (0.6 * r.segmentAlignment[s] + 0.4 * r.segmentRhythm[s]).toInt();
+        expect(r.segmentScore[s], expected);
+      }
+    });
+
+    test('offset positivo -> diferencia señada positiva por componente', () {
+      final ref = makeSeq(30);
+      final user = makeSeq(30, offset: 10);
+      final r = DtwComparator.compare(user, ref);
+      // Todas las features del usuario están por encima de la referencia.
+      for (var s = 0; s < 3; s++) {
+        expect(r.segmentSignedErrors[s][0], greaterThan(0));
+      }
     });
 
     test('determinismo: misma entrada -> misma salida', () {
@@ -81,6 +124,8 @@ void main() {
       expect(r.score, 0);
       expect(r.componentErrors, isEmpty);
       expect(r.segmentAlignment, [0, 0, 0]);
+      expect(r.segmentScore, [0, 0, 0]);
+      expect(r.segmentTempo, [0, 0, 0]);
     });
 
     test('worstComponentIndex válido en rango', () {

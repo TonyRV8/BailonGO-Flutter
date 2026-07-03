@@ -28,7 +28,10 @@ service cloud.firestore {
                   && resource.data.uid == request.auth.uid;
       allow create: if request.auth != null
                     && request.resource.data.uid == request.auth.uid;
-      allow update, delete: if false;
+      allow update: if false;
+      // Delete del dueño: lo usa el botón dev "Borrar progreso de prueba".
+      allow delete: if request.auth != null
+                    && resource.data.uid == request.auth.uid;
     }
   }
 }

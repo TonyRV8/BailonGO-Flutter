@@ -1,4 +1,5 @@
-/// Resultado de la comparación DTW. Port 1:1 de `DTWResult` (Kotlin).
+/// Resultado de la comparación DTW. Port de `DTWResult` (Kotlin), extendido
+/// con desglose por segmento (inicio/medio/final) para el feedback por tiempo.
 class DtwResult {
   const DtwResult({
     required this.score,
@@ -7,6 +8,10 @@ class DtwResult {
     required this.normalizedCost,
     required this.segmentRhythm,
     required this.segmentAlignment,
+    required this.segmentScore,
+    required this.segmentTempo,
+    required this.segmentComponentErrors,
+    required this.segmentSignedErrors,
     required this.componentErrors,
     required this.worstComponentIndex,
     this.processingTimeMs = 0,
@@ -19,11 +24,46 @@ class DtwResult {
   final double normalizedCost;
   final List<int> segmentRhythm;
   final List<int> segmentAlignment;
+
+  /// Precisión por segmento (RNF-06 aplicado a cada tiempo).
+  final List<int> segmentScore;
+
+  /// Desviación señada media del path por segmento, normalizada por
+  /// max(n, m). Positiva = el usuario va adelantado respecto al modelo
+  /// (ejecuta poses que llegan después) → debe ir más lento. Negativa =
+  /// atrasado → debe ir más rápido.
+  final List<double> segmentTempo;
+
+  /// Error absoluto ponderado promedio por componente, por segmento
+  /// (3 x featureSize). Sirve para localizar la peor feature de cada tiempo.
+  final List<List<double>> segmentComponentErrors;
+
+  /// Diferencia señada media (usuario − referencia, normalizada por rango)
+  /// por componente y segmento. El signo da la dirección de la corrección
+  /// ("levanta más" vs "no levantes tanto").
+  final List<List<double>> segmentSignedErrors;
+
   final List<double> componentErrors;
   final int worstComponentIndex;
   final int processingTimeMs;
 
-  /// Nombres de los 15 componentes del vector, para feedback cualitativo (RF-10).
+  /// Resultado vacío/cero seguro (entradas inválidas).
+  static const DtwResult empty = DtwResult(
+    score: 0,
+    rhythmScore: 0,
+    alignmentScore: 0,
+    normalizedCost: 0,
+    segmentRhythm: [0, 0, 0],
+    segmentAlignment: [0, 0, 0],
+    segmentScore: [0, 0, 0],
+    segmentTempo: [0, 0, 0],
+    segmentComponentErrors: [[], [], []],
+    segmentSignedErrors: [[], [], []],
+    componentErrors: [],
+    worstComponentIndex: 0,
+  );
+
+  /// Nombres de los componentes del vector, para feedback cualitativo (RF-10).
   static const List<String> componentNames = [
     'la flexión de tu rodilla izquierda', // 0
     'la flexión de tu rodilla derecha', // 1

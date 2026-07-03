@@ -16,6 +16,7 @@ import '../../../pose/data/camera_input.dart';
 import '../../../pose/domain/entities/pose_frame.dart';
 import '../../../pose/presentation/providers/pose_providers.dart';
 import '../../../pose/presentation/widgets/pose_painter.dart';
+import '../../../settings/presentation/providers/settings_providers.dart';
 import '../../domain/evaluation_feedback.dart';
 import '../../engine/dtw_comparator.dart';
 import '../../engine/dtw_result.dart';
@@ -23,10 +24,10 @@ import '../../engine/feature_extractor.dart';
 import '../providers/evaluation_providers.dart';
 import '../widgets/results_sheet.dart';
 
-/// La referencia se extrae con isMirrored=false; la captura en vivo se procesa
-/// igual (raw NV21, sin flip) para que coincidan. Si la lateralidad sale
-/// invertida en device, poner en true.
-const bool _mirrorLiveCapture = false;
+// La referencia se extrae con isMirrored=false; la captura en vivo se procesa
+// igual (raw NV21, sin flip) para que coincidan. Si la lateralidad sale
+// invertida en el dispositivo, el usuario activa "Corregir lateralidad" en
+// Configuración (users.settings.mirrorCapture).
 
 enum _Phase { preparing, noVideo, ready, countdown, capturing, computing, error, denied }
 
@@ -140,7 +141,7 @@ class _EvaluationPageState extends ConsumerState<EvaluationPage> {
       if (_phase == _Phase.capturing) {
         final v = FeatureExtractor.extractFeatures(
           frame.landmarks,
-          isMirrored: _mirrorLiveCapture,
+          isMirrored: ref.read(currentSettingsProvider).mirrorCapture,
         );
         if (v != null) _userFrames.add(v);
       }
@@ -228,7 +229,7 @@ class _EvaluationPageState extends ConsumerState<EvaluationPage> {
       isScrollControlled: true,
       builder: (_) => ResultsSheet(
         result: result,
-        feedback: feedbackFor(result),
+        feedback: buildFeedback(result),
         hasNext: nextId != null,
       ),
     );
@@ -275,12 +276,12 @@ class _EvaluationPageState extends ConsumerState<EvaluationPage> {
           Text('Preparando referencia…'),
         ]));
       case _Phase.denied:
-        return _Centered(
+        return const _Centered(
           child: Column(mainAxisSize: MainAxisSize.min, children: [
-            const Text('Permiso de cámara denegado'),
-            const SizedBox(height: 12),
+            Text('Permiso de cámara denegado'),
+            SizedBox(height: 12),
             FilledButton(
-                onPressed: openAppSettings, child: const Text('Abrir ajustes')),
+                onPressed: openAppSettings, child: Text('Abrir ajustes')),
           ]),
         );
       case _Phase.noVideo:

@@ -40,4 +40,20 @@ class ReferenceRepository {
     _cache[step.id] = frames;
     return frames.length;
   }
+
+  /// Dev: como [extractAndUpload] para varios pasos, extrayendo cada video una
+  /// sola vez aunque lo compartan (copias del paso de prueba).
+  Future<int> extractAndUploadAll(List<DanceStep> steps) async {
+    final byUrl = <String, List<List<double>>>{};
+    var frames = 0;
+    for (final step in steps) {
+      if (!step.hasVideo) continue;
+      final f = byUrl[step.mediaUrl!] ??=
+          await _processor.processAsset(step.mediaUrl!);
+      await _remote.save(step.id, f);
+      _cache[step.id] = f;
+      frames = f.length;
+    }
+    return frames;
+  }
 }

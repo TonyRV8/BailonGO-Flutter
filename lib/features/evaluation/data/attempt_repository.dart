@@ -6,6 +6,10 @@ import '../engine/dtw_result.dart';
 /// Persiste los intentos en la colección HISTORY (doc 5.3.3). La mejor marca
 /// (RN-04) se deriva como el máximo de `scores.total` por paso, así que basta
 /// con guardar cada intento.
+///
+/// Offline-first (doc 5.3.3.2): la escritura va primero a la cache local de
+/// Firestore (no se espera el ack del servidor); el SDK la sincroniza solo
+/// cuando hay red, con last-write-wins.
 class AttemptRepository {
   AttemptRepository(this._firestore);
 
@@ -16,17 +20,35 @@ class AttemptRepository {
     required String pasoId,
     required DtwResult result,
   }) async {
-    await _firestore.collection(AppConstants.historyCollection).add({
+    final doc = _firestore.collection(AppConstants.historyCollection).doc();
+    // No se espera el Future de red: la cache local persiste el intento al
+    // instante y el SDK lo sube cuando haya conexión.
+    unawaitedWrite(doc.set({
       'uid': uid,
       'pasoId': pasoId,
       'scores': {
         'ritmo': result.rhythmScore.toDouble(),
         'alineacion': result.alignmentScore.toDouble(),
         'total': result.score.toDouble(),
+        // Desglose por tiempo (inicio/medio/final).
+        'segmentos': [
+          for (var s = 0; s < 3; s++)
+            {
+              'ritmo': result.segmentRhythm[s].toDouble(),
+              'alineacion': result.segmentAlignment[s].toDouble(),
+              'total': result.segmentScore[s].toDouble(),
+            },
+        ],
       },
       'deviceInfo': <String, dynamic>{},
       'timestamp': FieldValue.serverTimestamp(),
       'synced': true,
-    });
+    }));
+  }
+
+  /// Dispara la escritura sin bloquear el flujo; los errores de sync quedan
+  /// registrados por el SDK y no afectan la UX del intento.
+  static void unawaitedWrite(Future<void> future) {
+    future.ignore();
   }
 }

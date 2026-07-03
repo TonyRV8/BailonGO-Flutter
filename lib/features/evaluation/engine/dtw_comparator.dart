@@ -86,16 +86,7 @@ class DtwComparator {
     List<double>? weights,
   }) {
     if (userFrames.isEmpty || refFrames.isEmpty) {
-      return const DtwResult(
-        score: 0,
-        rhythmScore: 0,
-        alignmentScore: 0,
-        normalizedCost: 0,
-        segmentRhythm: [0, 0, 0],
-        segmentAlignment: [0, 0, 0],
-        componentErrors: [],
-        worstComponentIndex: 0,
-      );
+      return DtwResult.empty;
     }
 
     final uSmooth = _smooth(userFrames);
@@ -168,7 +159,15 @@ class DtwComparator {
     final userFrameCount = List<int>.filled(n + 1, 0);
 
     final segDevSum = List<double>.filled(3, 0);
+    final segDevSignedSum = List<double>.filled(3, 0);
     final segDevCount = List<int>.filled(3, 0);
+
+    // Por segmento: error abs ponderado y diferencia señada (user − ref,
+    // normalizada por rango) por componente — base del feedback por tiempo.
+    final segCompAbs =
+        List.generate(3, (_) => List<double>.filled(featureSize, 0));
+    final segCompSigned =
+        List.generate(3, (_) => List<double>.filled(featureSize, 0));
 
     final idealSlope = m / n;
     final normDenom = math.max(n, m).toDouble();
@@ -192,8 +191,19 @@ class DtwComparator {
 
       final seg = ((ci - 1) * 3 ~/ n).clamp(0, 2).toInt();
       final idealJ = ci * idealSlope;
-      segDevSum[seg] += (cj - idealJ).abs() / normDenom;
+      final signedDev = (cj - idealJ) / normDenom;
+      segDevSum[seg] += signedDev.abs();
+      segDevSignedSum[seg] += signedDev;
       segDevCount[seg]++;
+
+      final u = uSmooth[ci - 1];
+      final r = rSmooth[cj - 1];
+      for (var c = 0; c < featureSize; c++) {
+        final range = c < _featureRanges.length ? _featureRanges[c] : 1.0;
+        final diff = (u[c] - r[c]) / range;
+        segCompAbs[seg][c] += w8[c] * diff.abs();
+        segCompSigned[seg][c] += diff;
+      }
 
       switch (parent[ci][cj]) {
         case 0:
@@ -254,6 +264,32 @@ class DtwComparator {
           coverageFactor);
     });
 
+    final segScore = List<int>.generate(
+      3,
+      (s) => (_alignWeight * segAlignment[s] + _rhythmWeight * segRhythm[s])
+          .toInt()
+          .clamp(0, 100)
+          .toInt(),
+    );
+    final segTempo = List<double>.generate(
+      3,
+      (s) => segDevCount[s] > 0 ? segDevSignedSum[s] / segDevCount[s] : 0.0,
+    );
+    final segCompErrors = List<List<double>>.generate(
+      3,
+      (s) => segDevCount[s] > 0
+          ? List<double>.generate(
+              featureSize, (c) => segCompAbs[s][c] / segDevCount[s])
+          : List<double>.filled(featureSize, 0),
+    );
+    final segSignedErrors = List<List<double>>.generate(
+      3,
+      (s) => segDevCount[s] > 0
+          ? List<double>.generate(
+              featureSize, (c) => segCompSigned[s][c] / segDevCount[s])
+          : List<double>.filled(featureSize, 0),
+    );
+
     // ── Scores globales ──────────────────────────────────────────────
     final totalFrames = math.max(segFrameCount.reduce((a, b) => a + b), 1);
     final alignmentAvg = segCostSum.reduce((a, b) => a + b) / totalFrames;
@@ -287,6 +323,10 @@ class DtwComparator {
       normalizedCost: normalizedCost,
       segmentRhythm: segRhythm,
       segmentAlignment: segAlignment,
+      segmentScore: segScore,
+      segmentTempo: segTempo,
+      segmentComponentErrors: segCompErrors,
+      segmentSignedErrors: segSignedErrors,
       componentErrors: componentErrors,
       worstComponentIndex: worstIdx,
     );

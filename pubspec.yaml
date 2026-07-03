@@ -32,6 +32,9 @@ dependencies:
   camera: ^0.11.0
   permission_handler: ^11.3.1
 
+  # Foto de perfil (RF-02)
+  image_picker: ^1.1.2
+
   # Fases posteriores (se activan al llegar a su fase):
   # hive: ^2.2.3
   # hive_flutter: ^1.1.0

@@ -1,13 +1,16 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:image_picker/image_picker.dart';
 
-import '../../../../core/config/app_constants.dart';
 import '../../../../core/router/app_routes.dart';
 import '../../../auth/domain/entities/app_user.dart';
 import '../../../auth/presentation/providers/auth_providers.dart';
 import '../../../catalog/domain/entities/dance_step.dart';
 import '../../../catalog/presentation/providers/catalog_providers.dart';
+import '../../../settings/presentation/providers/settings_providers.dart';
 import '../providers/profile_providers.dart';
 
 /// Perfil + progreso (RF-02, RF-03, RF-04).
@@ -81,16 +84,59 @@ class _Header extends ConsumerWidget {
     }
   }
 
+  /// Foto de perfil (RF-02): elegir de galería y subir a Storage.
+  Future<void> _pickPhoto(BuildContext context, WidgetRef ref) async {
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      final picked = await ImagePicker().pickImage(
+        source: ImageSource.gallery,
+        maxWidth: 720,
+        maxHeight: 720,
+        imageQuality: 85,
+      );
+      if (picked == null) return;
+      await ref
+          .read(profileControllerProvider.notifier)
+          .updatePhoto(File(picked.path));
+      messenger.showSnackBar(
+          const SnackBar(content: Text('Foto de perfil actualizada.')));
+    } catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text('Error al subir: $e')));
+    }
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final initial =
         (user.nombre?.isNotEmpty ?? false) ? user.nombre![0].toUpperCase() : '?';
+    final hasPhoto = user.fotoUrl != null && user.fotoUrl!.isNotEmpty;
     return Column(
       children: [
-        CircleAvatar(
-          radius: 40,
-          child: Text(initial, style: theme.textTheme.headlineMedium),
+        Stack(
+          alignment: Alignment.bottomRight,
+          children: [
+            CircleAvatar(
+              radius: 40,
+              backgroundImage: hasPhoto ? NetworkImage(user.fotoUrl!) : null,
+              child: hasPhoto
+                  ? null
+                  : Text(initial, style: theme.textTheme.headlineMedium),
+            ),
+            Material(
+              color: theme.colorScheme.primary,
+              shape: const CircleBorder(),
+              child: InkWell(
+                customBorder: const CircleBorder(),
+                onTap: () => _pickPhoto(context, ref),
+                child: Padding(
+                  padding: const EdgeInsets.all(4),
+                  child: Icon(Icons.camera_alt,
+                      size: 16, color: theme.colorScheme.onPrimary),
+                ),
+              ),
+            ),
+          ],
         ),
         const SizedBox(height: 12),
         Text(user.nombre ?? 'Sin nombre', style: theme.textTheme.titleLarge),
@@ -129,6 +175,8 @@ class _Progress extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final catalog = ref.watch(catalogProvider);
     final scores = ref.watch(userBestScoresProvider);
+    // Umbral de "Aprendido" configurable (RN-02, users.settings).
+    final threshold = ref.watch(currentSettingsProvider).learnedThreshold;
 
     return catalog.when(
       loading: () => const Center(child: CircularProgressIndicator()),
@@ -139,7 +187,7 @@ class _Progress extends ConsumerWidget {
         _StepStatus statusOf(DanceStep s) {
           final b = best[s.id];
           if (b == null) return _StepStatus.notStarted;
-          return b >= AppConstants.learnedThreshold
+          return b >= threshold
               ? _StepStatus.learned
               : _StepStatus.practicing;
         }

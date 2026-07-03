@@ -166,13 +166,13 @@ class _PosePageState extends ConsumerState<PosePage>
       case _Status.initializing:
         return const Center(child: CircularProgressIndicator());
       case _Status.denied:
-        return _Message(
+        return const _Message(
           icon: Icons.no_photography_outlined,
           title: 'Permiso de cámara denegado',
           subtitle: 'Actívalo para usar la evaluación.',
           action: FilledButton(
             onPressed: openAppSettings,
-            child: const Text('Abrir ajustes'),
+            child: Text('Abrir ajustes'),
           ),
         );
       case _Status.error:

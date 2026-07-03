@@ -2,18 +2,25 @@ import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../../core/config/app_constants.dart';
+import '../../../auth/presentation/providers/auth_providers.dart';
 import '../../../catalog/data/catalog_seed.dart';
 import '../../../catalog/presentation/providers/catalog_providers.dart';
 import '../../../evaluation/engine/dtw_comparator.dart';
 import '../../../evaluation/engine/dtw_result.dart';
 import '../../../evaluation/presentation/providers/evaluation_providers.dart';
+import '../providers/settings_providers.dart';
 
-/// Configuración (RF-01). Por ahora solo incluye herramientas de desarrollo.
-class SettingsPage extends StatelessWidget {
+/// Configuración (RF-01): preferencias del usuario persistidas en
+/// `users.settings` + herramientas de desarrollo (solo debug).
+class SettingsPage extends ConsumerWidget {
   const SettingsPage({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final settings = ref.watch(currentSettingsProvider);
+    final controller = ref.read(settingsControllerProvider.notifier);
+
     return ListView(
       padding: const EdgeInsets.all(24),
       children: [
@@ -24,11 +31,36 @@ class SettingsPage extends StatelessWidget {
           child: Text('Configuración',
               style: Theme.of(context).textTheme.headlineSmall),
         ),
+        const SizedBox(height: 24),
+        Text('Evaluación', style: Theme.of(context).textTheme.titleMedium),
         const SizedBox(height: 8),
-        Text(
-          'Preferencias, modelo de pose y cuenta.\nDisponible en fases posteriores.',
-          textAlign: TextAlign.center,
-          style: Theme.of(context).textTheme.bodyMedium,
+        // Umbral de "Paso Aprendido" (RN-02), configurable.
+        ListTile(
+          contentPadding: EdgeInsets.zero,
+          leading: const Icon(Icons.school_outlined),
+          title: const Text('Umbral de "Aprendido"'),
+          subtitle: Text(
+              'Un paso cuenta como aprendido con una mejor marca ≥ '
+              '${settings.learnedThreshold.toStringAsFixed(0)}%.'),
+        ),
+        Slider(
+          value: settings.learnedThreshold.clamp(50, 100),
+          min: 50,
+          max: 100,
+          divisions: 10,
+          label: '${settings.learnedThreshold.toStringAsFixed(0)}%',
+          onChanged: (v) =>
+              controller.save(settings.copyWith(learnedThreshold: v)),
+        ),
+        SwitchListTile(
+          contentPadding: EdgeInsets.zero,
+          secondary: const Icon(Icons.flip_outlined),
+          title: const Text('Corregir lateralidad (espejo)'),
+          subtitle: const Text(
+              'Actívalo si la evaluación confunde tu lado izquierdo y derecho.'),
+          value: settings.mirrorCapture,
+          onChanged: (v) =>
+              controller.save(settings.copyWith(mirrorCapture: v)),
         ),
         // Herramientas de desarrollo: solo en builds debug.
         if (kDebugMode) ...[
@@ -37,6 +69,7 @@ class SettingsPage extends StatelessWidget {
           const _SeedCatalogTile(),
           const _UploadReferenceTile(),
           const _ValidateEngineTile(),
+          const _ResetTestProgressTile(),
         ],
       ],
     );
@@ -62,7 +95,8 @@ class _SeedCatalogTileState extends ConsumerState<_SeedCatalogTile> {
       await ref.read(catalogRepositoryProvider).seedCatalog();
       ref.invalidate(catalogProvider);
       messenger.showSnackBar(
-        const SnackBar(content: Text('Catálogo sembrado (9 pasos).')),
+        SnackBar(
+            content: Text('Catálogo sembrado (${kCatalogSeed.length} pasos).')),
       );
     } catch (e) {
       messenger.showSnackBar(
@@ -78,7 +112,7 @@ class _SeedCatalogTileState extends ConsumerState<_SeedCatalogTile> {
     return ListTile(
       leading: const Icon(Icons.cloud_upload_outlined),
       title: const Text('Sembrar catálogo (dev)'),
-      subtitle: const Text('Escribe los 9 pasos en Firestore.'),
+      subtitle: Text('Escribe los ${kCatalogSeed.length} pasos en Firestore.'),
       trailing: _busy
           ? const SizedBox(
               width: 18, height: 18,
@@ -106,11 +140,16 @@ class _UploadReferenceTileState extends ConsumerState<_UploadReferenceTile> {
     setState(() => _busy = true);
     final messenger = ScaffoldMessenger.of(context);
     try {
-      final step = kCatalogSeed.firstWhere((s) => s.id == 'paso_prueba');
-      final n =
-          await ref.read(referenceRepositoryProvider).extractAndUpload(step);
+      final steps = kCatalogSeed
+          .where((s) => kTestStepIds.contains(s.id))
+          .toList(growable: false);
+      final n = await ref
+          .read(referenceRepositoryProvider)
+          .extractAndUploadAll(steps);
       messenger.showSnackBar(
-        SnackBar(content: Text('Referencia subida: $n frames.')),
+        SnackBar(
+            content: Text(
+                'Referencia subida para ${steps.length} pasos: $n frames.')),
       );
     } catch (e) {
       messenger.showSnackBar(SnackBar(content: Text('Error: $e')));
@@ -124,7 +163,8 @@ class _UploadReferenceTileState extends ConsumerState<_UploadReferenceTile> {
     return ListTile(
       leading: const Icon(Icons.upload_file_outlined),
       title: const Text('Subir referencia (dev)'),
-      subtitle: const Text('Extrae paso_prueba y la guarda en Firestore.'),
+      subtitle:
+          const Text('Extrae los pasos de prueba y los guarda en Firestore.'),
       trailing: _busy
           ? const SizedBox(
               width: 18, height: 18,
@@ -210,6 +250,87 @@ class _ValidateEngineTileState extends ConsumerState<_ValidateEngineTile> {
               child: CircularProgressIndicator(strokeWidth: 2))
           : const Icon(Icons.chevron_right),
       onTap: _busy ? null : _run,
+    );
+  }
+}
+
+/// Dev TEMPORAL: borra del HISTORY los intentos del usuario en los pasos de
+/// prueba, para re-testear la sincronización de la mejor marca desde cero.
+class _ResetTestProgressTile extends ConsumerStatefulWidget {
+  const _ResetTestProgressTile();
+
+  @override
+  ConsumerState<_ResetTestProgressTile> createState() =>
+      _ResetTestProgressTileState();
+}
+
+class _ResetTestProgressTileState
+    extends ConsumerState<_ResetTestProgressTile> {
+  bool _busy = false;
+
+  Future<void> _reset() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('¿Borrar progreso de prueba?'),
+        content: const Text(
+            'Se eliminarán TODOS tus intentos de los pasos de prueba '
+            '(1, 2 y 3). No se puede deshacer.'),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('Cancelar')),
+          FilledButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              child: const Text('Borrar')),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    setState(() => _busy = true);
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      final uid = ref.read(currentUserProvider).uid;
+      if (uid.isEmpty) return;
+      final firestore = ref.read(firebaseFirestoreProvider);
+      final snap = await firestore
+          .collection(AppConstants.historyCollection)
+          .where('uid', isEqualTo: uid)
+          .where('pasoId', whereIn: kTestStepIds)
+          .get();
+      final batch = firestore.batch();
+      for (final doc in snap.docs) {
+        batch.delete(doc.reference);
+      }
+      await batch.commit();
+      // Refresca mejores marcas y progreso.
+      ref.invalidate(bestScoreProvider);
+      ref.invalidate(userBestScoresProvider);
+      messenger.showSnackBar(
+        SnackBar(
+            content: Text('Progreso borrado: ${snap.docs.length} intentos.')),
+      );
+    } catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text('Error al borrar: $e')));
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return ListTile(
+      leading: Icon(Icons.delete_forever_outlined,
+          color: Theme.of(context).colorScheme.error),
+      title: const Text('Borrar progreso de prueba (dev)'),
+      subtitle: const Text('Elimina tus intentos de los pasos de prueba.'),
+      trailing: _busy
+          ? const SizedBox(
+              width: 18, height: 18,
+              child: CircularProgressIndicator(strokeWidth: 2))
+          : const Icon(Icons.chevron_right),
+      onTap: _busy ? null : _reset,
     );
   }
 }
