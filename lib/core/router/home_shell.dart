@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../features/auth/domain/entities/app_user.dart';
 import '../../features/auth/presentation/providers/auth_providers.dart';
+import '../../features/profile/presentation/providers/profile_providers.dart';
 import 'app_routes.dart';
 
 /// Scaffold con Drawer persistente (RF-01): Catálogo, Perfil, Configuración.
@@ -31,7 +33,10 @@ class HomeShell extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final user = ref.watch(currentUserProvider);
+    // Perfil de Firestore (se invalida al editar nombre/foto → el drawer se
+    // refresca al instante). Mientras carga, cae al usuario de auth.
+    final AppUser user =
+        ref.watch(profileProvider).value ?? ref.watch(currentUserProvider);
 
     return Scaffold(
       appBar: AppBar(title: Text(_title)),

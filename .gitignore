@@ -1,27 +1,36 @@
-# Flutter / Dart
+# ─────────────────────────────────────────────────────────────
+# BailonGO — .gitignore
+# Regla: se versiona TODO lo necesario para clonar y correr la app.
+# ─────────────────────────────────────────────────────────────
+
+# Flutter / Dart — artefactos de build (se regeneran con `flutter pub get`)
 .dart_tool/
 .packages
 build/
 .pub-cache/
 .pub/
-pubspec.lock
 .flutter-plugins
 .flutter-plugins-dependencies
+.fvm/
+*.log
+/coverage/
 
-# IDE
+# NOTA: pubspec.lock SÍ se versiona (es una app, no un paquete).
+# Garantiza que todo el equipo compile con las mismas versiones.
+
+# IDE — cada quien genera la suya al abrir el proyecto
 .idea/
 .vscode/
 *.iml
+*.ipr
+*.iws
 
-# Firebase (NO subir credenciales)
-google-services.json
-GoogleService-Info.plist
-firebase_app_id_file.json
-# Nota: lib/core/config/firebase_options.dart lo genera `flutterfire configure`.
-# Decide en tu equipo si lo versionas (no contiene secretos sensibles, pero
-# expone identificadores del proyecto).
+# Configuración local de máquina (rutas absolutas del SDK)
+android/local.properties
+ios/Flutter/Generated.xcconfig
+ios/Flutter/flutter_export_environment.sh
 
-# Firma de release (NUNCA subir) — aparecen al firmar el APK/IPA
+# Firma de release (NUNCA subir)
 **/key.properties
 *.jks
 *.keystore
@@ -29,26 +38,35 @@ firebase_app_id_file.json
 *.p8
 *.mobileprovision
 
-# Credenciales de servidor (Cloud Functions / admin, fases futuras)
+# Credenciales de servidor / admin (NUNCA subir)
 *serviceAccount*.json
 service-account*.json
 *.pem
 .env
 .env.*
 
-# Videos de prueba duplicados en la raíz (las copias canónicas viven en
-# assets/videos y assets/fixtures). Se mantienen en disco, fuera del repo.
+# NOTA: android/app/google-services.json SÍ se versiona.
+# Sólo contiene identificadores públicos de cliente Firebase (los mismos que
+# ya están en lib/core/config/firebase_options.dart). El acceso a los datos
+# lo protegen firestore.rules y storage.rules, no este archivo.
+
+# Videos de prueba duplicados en la raíz. Las copias canónicas que la app
+# empaqueta viven en assets/videos y assets/fixtures y SÍ se versionan.
 /bad.mov
 /good.mov
 /ref.mov
 
-# Notas internas / referencia local (no versionar)
-/resumen.txt
-/resumen2.txt
-/resumen3.txt
-/storages.rules
-/firestore.rules
+# Notas internas y borradores de documentación (no versionar)
+/plan_old.txt
+/resumen*.txt
+/actual.txt
+/notas*.txt
 /docs/
+*.docx
+/ESCOM_TT1*.pdf
+/TT1_*.pdf
+/Evidencias_*.pdf
+~$*
 
 # OS
 .DS_Store

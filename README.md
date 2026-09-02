@@ -34,42 +34,36 @@ lib/
     catalog/  profile/  settings/   # placeholders (se llenan por fase)
 ```
 
-## Puesta en marcha (pasos manuales)
+## Puesta en marcha
 
-Requiere Flutter SDK instalado (`flutter --version`).
+> **Guía completa paso a paso: [`GUIA_INSTALACION.pdf`](GUIA_INSTALACION.pdf)**
+> Instalación desde cero (Flutter, Android Studio, SDK de Android), clonado,
+> ejecución y solución de problemas. Léela si es tu primera vez con el proyecto.
 
-1. **Generar scaffolding nativo** (android/ios/web) sin perder `lib/`:
-   ```bash
-   cd C:/BailonGO
-   flutter create . --org com.bailongo --project-name bailongo
-   ```
+Versión corta, si ya tienes Flutter 3.44.4 y Android Studio configurados:
 
-2. **Instalar dependencias:**
-   ```bash
-   flutter pub get
-   ```
+```bash
+git clone https://github.com/TonyRV8/BailonGO-Flutter.git
+cd BailonGO-Flutter
+flutter pub get
+flutter run          # con un celular Android (API 24+) conectado por USB
+```
 
-3. **Crear el proyecto Firebase** en https://console.firebase.google.com
-   y añadir apps Android/iOS (o dejar que el paso 4 lo configure).
+**No hace falta configurar Firebase.** Las credenciales de cliente ya están
+versionadas en `android/app/google-services.json` y en
+`lib/core/config/firebase_options.dart`; todo el equipo usa el mismo proyecto
+`bailongo-f3384`. El acceso a los datos lo protegen `firestore.rules` y
+`storage.rules`, no esos archivos.
 
-4. **Conectar Firebase** (genera `lib/core/config/firebase_options.dart` real,
-   reemplazando el placeholder):
-   ```bash
-   dart pub global activate flutterfire_cli
-   flutterfire configure --project=<TU_PROJECT_ID>
-   ```
+### No corras estos comandos
 
-5. **Habilitar Authentication** en la consola Firebase →
-   Authentication → Sign-in method → **Email/Password** (Activar).
+| Comando | Por qué |
+|---|---|
+| `flutter create .` | Regenera `android/`, `ios/` y `web/` y **borra** los cambios hechos a mano: permiso de cámara, `minSdk 24`, `noCompress("task")` y la dependencia de MediaPipe. |
+| `flutterfire configure` | Sobrescribe `firebase_options.dart` con otro proyecto y el equipo deja de compartir la base de datos. |
+| `flutter upgrade` | El proyecto está fijado a Flutter 3.44.4. Avisa al equipo antes de subir de versión. |
 
-6. **Crear Firestore** (modo producción) y publicar las reglas de
-   `firestore.rules`.
+### Reglas de seguridad del backend
 
-7. **Ejecutar:**
-   ```bash
-   flutter run
-   ```
-
-> Mientras `firebase_options.dart` siga siendo el placeholder,
-> `Firebase.initializeApp` lanzará `UnsupportedError` (es la señal de que
-> falta el paso 4).
+Se publican una sola vez desde la consola de Firebase (ya están aplicadas):
+`firestore.rules` en Firestore -> Rules y `storage.rules` en Storage -> Rules.

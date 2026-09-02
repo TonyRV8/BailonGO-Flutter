@@ -3,11 +3,11 @@ import 'package:flutter/material.dart';
 import '../../domain/evaluation_feedback.dart';
 import '../../engine/dtw_result.dart';
 
-enum ResultsAction { exit, next }
+enum ResultsAction { exit, retry, next }
 
 /// Modal de resultados (RF-10): precisión total + desglose en los 3 tiempos
 /// del paso (inicio/medio/final) con alineación, ritmo y consejos específicos
-/// por tiempo. Controles Salir / Siguiente paso (RF-11).
+/// por tiempo. Controles Salir / Reintentar / Siguiente paso (RF-11).
 class ResultsSheet extends StatelessWidget {
   const ResultsSheet({
     super.key,
@@ -104,11 +104,20 @@ class ResultsSheet extends StatelessWidget {
                   ),
                   const SizedBox(width: 12),
                   Expanded(
+                    child: FilledButton.tonalIcon(
+                      onPressed: () =>
+                          Navigator.of(context).pop(ResultsAction.retry),
+                      icon: const Icon(Icons.replay),
+                      label: const Text('Reintentar'),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
                     child: FilledButton(
                       onPressed: hasNext
                           ? () => Navigator.of(context).pop(ResultsAction.next)
                           : null,
-                      child: const Text('Siguiente paso'),
+                      child: const Text('Siguiente'),
                     ),
                   ),
                 ],

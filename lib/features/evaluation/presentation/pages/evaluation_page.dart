@@ -212,7 +212,9 @@ class _EvaluationPageState extends ConsumerState<EvaluationPage> {
               pasoId: widget.stepId,
               result: result,
             );
+        // Refresca la ficha del paso, el catálogo y el progreso del perfil.
         ref.invalidate(bestScoreProvider(widget.stepId));
+        ref.invalidate(userBestScoresProvider);
       } catch (_) {
         // Sin red: el intento se mostrará igual; sync queda para Fase 7.
       }
@@ -235,7 +237,10 @@ class _EvaluationPageState extends ConsumerState<EvaluationPage> {
     );
 
     if (!mounted) return;
-    if (action == ResultsAction.next && nextId != null) {
+    if (action == ResultsAction.retry) {
+      // La cámara sigue activa y la referencia en memoria: directo al conteo.
+      _startCountdown();
+    } else if (action == ResultsAction.next && nextId != null) {
       context.pushReplacement('${AppRoutes.evaluate}/$nextId');
     } else {
       context.pop();
