@@ -34,7 +34,7 @@ List<PoseLandmark> standingPose({double conf = 1.0}) {
 
 void main() {
   group('FeatureExtractor', () {
-    test('extrae vector de 22 features', () {
+    test('extrae el vector completo de features', () {
       final f = FeatureExtractor.extractFeatures(standingPose());
       expect(f, isNotNull);
       expect(f!.length, FeatureExtractor.featureCount);
@@ -68,6 +68,61 @@ void main() {
       for (var i = 0; i < raw.length; i++) {
         expect(mirrored[i], closeTo(expected[i], 1e-9));
       }
+    });
+
+    group('features de cadera (22-25)', () {
+      test('una pose simétrica y centrada no acusa inclinación ni sway', () {
+        final f = FeatureExtractor.extractFeatures(standingPose())!;
+        expect(f[22], closeTo(0, 1e-9), reason: 'caderas a la misma altura');
+        expect(f[23], closeTo(0, 1e-9), reason: 'cadera alineada con el torso');
+        expect(f[25], greaterThan(0), reason: 'ancho cadera / ancho hombros');
+      });
+
+      test('subir una cadera cambia el signo de la inclinación', () {
+        final up = standingPose();
+        // y crece hacia abajo: restar sube la cadera izquierda.
+        up[23] = const PoseLandmark(type: 23, x: 0.45, y: 0.46, z: 0, confidence: 1);
+        final f = FeatureExtractor.extractFeatures(up)!;
+        expect(f[22], lessThan(0));
+      });
+
+      test('desplazar la cadera a un lado se detecta como sway', () {
+        final swayed = standingPose();
+        swayed[23] =
+            const PoseLandmark(type: 23, x: 0.52, y: 0.50, z: 0, confidence: 1);
+        swayed[24] =
+            const PoseLandmark(type: 24, x: 0.62, y: 0.50, z: 0, confidence: 1);
+        final f = FeatureExtractor.extractFeatures(swayed)!;
+        expect(f[23], greaterThan(0.1), reason: 'cadera a la derecha del torso');
+      });
+
+      test('sin hombros visibles las features relativas quedan neutras', () {
+        final noShoulders = standingPose();
+        for (final i in [11, 12]) {
+          noShoulders[i] =
+              PoseLandmark(type: i, x: 0.5, y: 0.30, z: 0, confidence: 0.1);
+        }
+        final f = FeatureExtractor.extractFeatures(noShoulders)!;
+        expect(f[23], 0);
+        expect(f[24], 0);
+        expect(f[25], 0);
+        // La inclinación solo necesita las caderas, que son críticas.
+        expect(f[22], closeTo(0, 1e-9));
+      });
+
+      test('el espejo invierte inclinación y sway, no altura ni giro', () {
+        final f = FeatureExtractor.extractFeatures(standingPose())!;
+        final tweaked = List<double>.from(f)
+          ..[22] = 0.3
+          ..[23] = -0.4
+          ..[24] = 1.2
+          ..[25] = 0.8;
+        final m = FeatureExtractor.mirrorFeatures(tweaked);
+        expect(m[22], -0.3);
+        expect(m[23], 0.4);
+        expect(m[24], 1.2);
+        expect(m[25], 0.8);
+      });
     });
   });
 }

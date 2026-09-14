@@ -21,6 +21,7 @@ import '../../../pose/presentation/widgets/pose_painter.dart';
 import '../../../settings/presentation/providers/settings_providers.dart';
 import '../../domain/evaluation_feedback.dart';
 import '../../engine/dtw_comparator.dart';
+import '../../engine/step_params.dart';
 import '../../engine/dtw_result.dart';
 import '../../engine/feature_extractor.dart';
 import '../../engine/retry_gesture_detector.dart';
@@ -108,6 +109,12 @@ class _EvaluationPageState extends ConsumerState<EvaluationPage>
   final AudioPlayer _tickPlayer = AudioPlayer(playerId: 'countdown_tick');
   final AudioPlayer _goPlayer = AudioPlayer(playerId: 'countdown_go');
 
+  // Musica del paso durante la captura. Es la pista extraida del propio video
+  // ideal (assets/sounds/<pasoId>.m4a), con el mismo recorte, asi que queda
+  // alineada con la referencia por construccion. Sin ella el alumno baila en
+  // silencio mientras el 40% de la nota mide su ritmo.
+  final AudioPlayer _musicPlayer = AudioPlayer(playerId: 'step_music');
+
   // Pulso de entrada de cada numero del conteo.
   late final AnimationController _pulse;
 
@@ -137,8 +144,12 @@ class _EvaluationPageState extends ConsumerState<EvaluationPage>
         // Precarga para que el primer pitido no llegue tarde.
         await e.key.setSource(e.value);
       }
+      await _musicPlayer.setReleaseMode(ReleaseMode.stop);
+      await _musicPlayer.setVolume(1);
+      await _musicPlayer.setSource(AssetSource('sounds/${widget.stepId}.m4a'));
     } catch (_) {
-      // Sin audio disponible: el conteo sigue siendo visual.
+      // Sin audio disponible: el conteo sigue siendo visual y la captura mide
+      // igual, solo que sin musica de apoyo.
     }
   }
 
@@ -344,6 +355,7 @@ class _EvaluationPageState extends ConsumerState<EvaluationPage>
     final durationMs =
         (_refFrames.length * 33).clamp(1000, 60000).toInt();
     final start = DateTime.now();
+    _playStepMusic();
     setState(() {
       _phase = _Phase.capturing;
       _progress = 0;
@@ -362,12 +374,36 @@ class _EvaluationPageState extends ConsumerState<EvaluationPage>
     });
   }
 
+  /// Arranca la musica del paso desde el principio, en paralelo a la captura.
+  /// Si el asset no existe, la evaluacion sigue sin musica.
+  Future<void> _playStepMusic() async {
+    try {
+      await _musicPlayer.stop();
+      await _musicPlayer.play(AssetSource('sounds/${widget.stepId}.m4a'));
+    } catch (_) {
+      // Sin musica: la captura no depende de ella.
+    }
+  }
+
+  Future<void> _stopStepMusic() async {
+    try {
+      await _musicPlayer.stop();
+    } catch (_) {
+      // Nada que parar.
+    }
+  }
+
   Future<void> _finishCapture() async {
+    await _stopStepMusic();
     setState(() => _phase = _Phase.computing);
     final result = DtwComparator.compare(
       _userFrames,
       _refFrames,
       weights: _step?.weights,
+      // Umbrales calibrados para ESTE paso (§7-ter): el coste normalizado de
+      // una misma calidad de ejecución varía 25x entre pasos, así que una
+      // curva global no sirve.
+      params: paramsFor(widget.stepId),
     );
 
     // Guardar intento (RN-04: la mejor marca se deriva del máximo en HISTORY).
@@ -441,6 +477,7 @@ class _EvaluationPageState extends ConsumerState<EvaluationPage>
     _goTimer?.cancel();
     _captureTimer?.cancel();
     _pulse.dispose();
+    _musicPlayer.dispose();
     _tickPlayer.dispose();
     _goPlayer.dispose();
     _controller?.dispose();

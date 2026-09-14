@@ -87,5 +87,9 @@ class DtwResult {
     'la posición lateral de tu mano derecha', // 19
     'la altura de tu mano izquierda', // 20
     'la altura de tu mano derecha', // 21
+    'la inclinación de tu cadera', // 22
+    'el movimiento lateral de tu cadera', // 23
+    'la altura de tu cadera', // 24
+    'el giro de tu cadera', // 25
   ];
 }

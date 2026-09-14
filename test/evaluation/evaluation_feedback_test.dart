@@ -1,5 +1,6 @@
 import 'package:bailongo/features/evaluation/domain/evaluation_feedback.dart';
 import 'package:bailongo/features/evaluation/engine/dtw_result.dart';
+import 'package:bailongo/features/evaluation/engine/feature_extractor.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 DtwResult makeResult({
@@ -25,7 +26,8 @@ DtwResult makeResult({
   );
 }
 
-List<double> zeros() => List<double>.filled(22, 0);
+List<double> zeros() =>
+    List<double>.filled(FeatureExtractor.featureCount, 0);
 
 void main() {
   group('buildFeedback', () {

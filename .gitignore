@@ -74,3 +74,20 @@ service-account*.json
 # OS
 .DS_Store
 Thumbs.db
+
+# ── Material de baile en bruto (grabaciones de la profesora) ─────────────────
+# Carpeta fuente completa: tomas originales a 1080x1920 / ~12 Mbps (~440 MB en
+# total). NO se versiona: git no puede soltar esos objetos una vez commiteados.
+# Las copias canónicas que usa la app son las recomprimidas a 720x1280:
+#   Buenos -> assets/videos/<pasoId>.mp4          (SÍ se versionan, ~15 MB)
+#   Malos  -> assets/fixtures/<pasoId>_regular.mp4 (no se versionan, ver abajo)
+# Conserva esta carpeta en local como copia maestra y respáldala aparte.
+/BailonGObailes/
+
+# Tomas "regulares" (4-6/10). Sólo sirven para calibrar el motor: no se
+# entregan en el APK y pesan demasiado para versionarlas.
+/assets/fixtures/*_regular.mp4
+
+# Landmarks extraídos en PC para calibrar (22 MB, regenerable en ~4 min con
+# tool/extract_landmarks.py). No se versiona.
+/tool/landmarks.json

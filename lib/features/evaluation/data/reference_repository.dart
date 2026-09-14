@@ -45,16 +45,19 @@ class ReferenceRepository {
   /// sola vez aunque lo compartan (copias del paso de prueba). La caché de
   /// sesión se llena aunque falle la subida (p.ej. reglas cerradas), para no
   /// perder la extracción; el error se relanza al final.
-  Future<int> extractAndUploadAll(List<DanceStep> steps) async {
+  ///
+  /// Devuelve el nº de fotogramas válidos por `pasoId`, para poder verificar
+  /// que se acerca a `duracion_ms / 33` (implementar_pasos.txt §3).
+  Future<Map<String, int>> extractAndUploadAll(List<DanceStep> steps) async {
     final byUrl = <String, List<List<double>>>{};
-    var frames = 0;
+    final frames = <String, int>{};
     Object? firstError;
     for (final step in steps) {
       if (!step.hasVideo) continue;
       final f = byUrl[step.mediaUrl!] ??=
           await _processor.processAsset(step.mediaUrl!);
       _cache[step.id] = f;
-      frames = f.length;
+      frames[step.id] = f.length;
       try {
         await _remote.save(step.id, f);
       } catch (e) {

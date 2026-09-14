@@ -1,5 +1,6 @@
 import 'dart:math' as math;
 
+import 'dtw_params.dart';
 import 'dtw_result.dart';
 import 'feature_extractor.dart';
 
@@ -10,63 +11,6 @@ import 'feature_extractor.dart';
 /// Todos los `const val` de ajuste del prototipo se conservan tal cual.
 class DtwComparator {
   DtwComparator._();
-
-  /// Zona muerta: costo promedio ≤ esto → alineación 100%.
-  static const double _alignNoiseFloor = 0.09;
-
-  /// Costo promedio ≥ esto → alineación 0%.
-  static const double _alignMax = 0.19;
-
-  /// Exponente de la curva costo→score (>1 castiga diferencias medianas).
-  static const double _alignCurvePower = 2.0;
-
-  /// Banda Sakoe-Chiba: máximo desfase como fracción de max(n, m).
-  static const double _bandRatio = 0.12;
-
-  /// Ventana centrada para suavizado pre-DTW.
-  static const int _smoothWindow = 5;
-
-  /// Ritmo: desviación del path respecto a la diagonal ideal.
-  static const double _rhythmFullDev = 0.04;
-  static const double _rhythmZeroDev = 0.25;
-
-  /// Pesos alineación vs ritmo (RNF-06).
-  static const double _alignWeight = 0.6;
-  static const double _rhythmWeight = 0.4;
-
-  /// Cobertura de movimiento (detecta ejecución incompleta).
-  static const double _coverageFullRatio = 0.75;
-  static const double _coverageZeroRatio = 0.25;
-  static const double _coverageMinFactor = 0.4;
-
-  /// Detección de ejecución especular.
-  static const double _mirrorFullSeverity = 0.35;
-  static const double _mirrorMinFactor = 0.15;
-
-  static const List<double> _featureRanges = [
-    120, // 0 knee angle
-    120, // 1 knee angle
-    2, // 2 leg inclination cosine
-    2, // 3 leg inclination cosine
-    5, // 4 feet distance ratio
-    6, // 5 ankle height Y
-    6, // 6 ankle height Y
-    8, // 7 x ankle pos
-    8, // 8 x ankle pos
-    6, // 9 x knee pos
-    6, // 10 x knee pos
-    2, // 11 foot dir X
-    2, // 12 foot dir X
-    1, // 13 foot pitch
-    1, // 14 foot pitch
-    225, // 15 arm angle L
-    225, // 16 arm angle R
-    3, // 17 shoulder tilt
-    9, // 18 wrist X rel L
-    9, // 19 wrist X rel R
-    9, // 20 wrist Y rel L
-    9, // 21 wrist Y rel R
-  ];
 
   /// Construye el vector de pesos efectivo (longitud [size]). Sin pesos: todos
   /// 1. Con pesos: usa los provistos; rellena con 1 si faltan componentes.
@@ -84,25 +28,26 @@ class DtwComparator {
     List<List<double>> userFrames,
     List<List<double>> refFrames, {
     List<double>? weights,
+    DtwParams params = DtwParams.defaults,
   }) {
     if (userFrames.isEmpty || refFrames.isEmpty) {
       return DtwResult.empty;
     }
 
-    final uSmooth = _smooth(userFrames);
-    final rSmooth = _smooth(refFrames);
+    final uSmooth = _smooth(userFrames, params);
+    final rSmooth = _smooth(refFrames, params);
 
     final n = uSmooth.length;
     final m = rSmooth.length;
     final w = math.max(
-      math.max((math.max(n, m) * _bandRatio).round(), 1),
+      math.max((math.max(n, m) * params.bandRatio).round(), 1),
       (n - m).abs(),
     );
     const inf = double.maxFinite / 2;
 
     final featureSize = math
         .min(uSmooth[0].length, rSmooth[0].length)
-        .clamp(1, _featureRanges.length)
+        .clamp(1, params.featureRanges.length)
         .toInt();
     final w8 = _effectiveWeights(weights, featureSize);
 
@@ -120,9 +65,10 @@ class DtwComparator {
       final jHigh = math.min(m, i + w);
       for (var j = jLow; j <= jHigh; j++) {
         final cost = _normalizedEuclideanDist(
-            uSmooth[i - 1], rSmooth[j - 1], featureSize, w8);
+            uSmooth[i - 1], rSmooth[j - 1], featureSize, w8, params);
         final compDist =
-            _componentDistances(uSmooth[i - 1], rSmooth[j - 1], featureSize, w8);
+            _componentDistances(
+            uSmooth[i - 1], rSmooth[j - 1], featureSize, w8, params);
 
         final c0 = dtw[i - 1][j - 1];
         final c1 = dtw[i - 1][j];
@@ -179,9 +125,9 @@ class DtwComparator {
     var ci = n, cj = m;
     while (ci > 0 && cj > 0) {
       final cost = _normalizedEuclideanDist(
-          uSmooth[ci - 1], rSmooth[cj - 1], featureSize, w8);
+          uSmooth[ci - 1], rSmooth[cj - 1], featureSize, w8, params);
       final mirrorCost = _normalizedEuclideanDist(
-          uSmooth[ci - 1], rMirrored[cj - 1], featureSize, w8);
+          uSmooth[ci - 1], rMirrored[cj - 1], featureSize, w8, params);
 
       userFrameCostSum[ci] += cost;
       userFrameCount[ci]++;
@@ -199,7 +145,7 @@ class DtwComparator {
       final u = uSmooth[ci - 1];
       final r = rSmooth[cj - 1];
       for (var c = 0; c < featureSize; c++) {
-        final range = c < _featureRanges.length ? _featureRanges[c] : 1.0;
+        final range = c < params.featureRanges.length ? params.featureRanges[c] : 1.0;
         final diff = (u[c] - r[c]) / range;
         segCompAbs[seg][c] += w8[c] * diff.abs();
         segCompSigned[seg][c] += diff;
@@ -238,16 +184,16 @@ class DtwComparator {
     }
 
     // ── Cobertura de movimiento ──────────────────────────────────────
-    final userEnergy = _motionEnergy(uSmooth, featureSize, w8);
-    final refEnergy = _motionEnergy(rSmooth, featureSize, w8);
+    final userEnergy = _motionEnergy(uSmooth, featureSize, w8, params);
+    final refEnergy = _motionEnergy(rSmooth, featureSize, w8, params);
     final coverageRatio =
         refEnergy > 1e-4 ? math.max(userEnergy / refEnergy, 0.0) : 1.0;
-    final coverageFactor = _coverageToFactor(coverageRatio);
+    final coverageFactor = _coverageToFactor(coverageRatio, params);
 
     // ── Detección de ejecución especular ─────────────────────────────
     final directAvg = directSum / pathLen;
     final mirrorAvg = mirrorSum / pathLen;
-    final mirrorFactor = _mirrorToFactor(directAvg, mirrorAvg);
+    final mirrorFactor = _mirrorToFactor(directAvg, mirrorAvg, params);
 
     final alignFactor = coverageFactor * mirrorFactor;
 
@@ -255,18 +201,18 @@ class DtwComparator {
     final segAlignment = List<int>.generate(3, (s) {
       if (segFrameCount[s] == 0) return 0;
       return _applyFactor(
-          _costToAlignScore(segCostSum[s] / segFrameCount[s]), alignFactor);
+          _costToAlignScore(segCostSum[s] / segFrameCount[s], params), alignFactor);
     });
     final segRhythm = List<int>.generate(3, (s) {
       if (segDevCount[s] == 0) return 0;
       return _applyFactor(
-          _deviationToRhythmScore(segDevSum[s] / segDevCount[s]),
+          _deviationToRhythmScore(segDevSum[s] / segDevCount[s], params),
           coverageFactor);
     });
 
     final segScore = List<int>.generate(
       3,
-      (s) => (_alignWeight * segAlignment[s] + _rhythmWeight * segRhythm[s])
+      (s) => (params.alignWeight * segAlignment[s] + params.rhythmWeight * segRhythm[s])
           .toInt()
           .clamp(0, 100)
           .toInt(),
@@ -294,14 +240,14 @@ class DtwComparator {
     final totalFrames = math.max(segFrameCount.reduce((a, b) => a + b), 1);
     final alignmentAvg = segCostSum.reduce((a, b) => a + b) / totalFrames;
     final alignmentScore =
-        _applyFactor(_costToAlignScore(alignmentAvg), alignFactor);
+        _applyFactor(_costToAlignScore(alignmentAvg, params), alignFactor);
 
     final overallDev = segDevSum.reduce((a, b) => a + b) / pathLen;
     final rhythmScore =
-        _applyFactor(_deviationToRhythmScore(overallDev), coverageFactor);
+        _applyFactor(_deviationToRhythmScore(overallDev, params), coverageFactor);
 
     final finalScore =
-        (_alignWeight * alignmentScore + _rhythmWeight * rhythmScore)
+        (params.alignWeight * alignmentScore + params.rhythmWeight * rhythmScore)
             .toInt()
             .clamp(0, 100)
             .toInt();
@@ -332,61 +278,63 @@ class DtwComparator {
     );
   }
 
-  static int _costToAlignScore(double cost) {
-    if (cost <= _alignNoiseFloor) return 100;
-    if (cost >= _alignMax) return 0;
-    final linearF = 1 - (cost - _alignNoiseFloor) / (_alignMax - _alignNoiseFloor);
-    final curved = math.pow(linearF, _alignCurvePower).toDouble();
+  static int _costToAlignScore(double cost, DtwParams params) {
+    if (cost <= params.alignNoiseFloor) return 100;
+    if (cost >= params.alignMax) return 0;
+    final linearF = 1 - (cost - params.alignNoiseFloor) / (params.alignMax - params.alignNoiseFloor);
+    final curved = math.pow(linearF, params.alignCurvePower).toDouble();
     return (curved * 100).toInt().clamp(0, 100).toInt();
   }
 
-  static int _deviationToRhythmScore(double dev) {
+  static int _deviationToRhythmScore(double dev, DtwParams params) {
     final double f;
-    if (dev <= _rhythmFullDev) {
+    if (dev <= params.rhythmFullDev) {
       f = 1;
-    } else if (dev >= _rhythmZeroDev) {
+    } else if (dev >= params.rhythmZeroDev) {
       f = 0;
     } else {
-      f = 1 - (dev - _rhythmFullDev) / (_rhythmZeroDev - _rhythmFullDev);
+      f = 1 - (dev - params.rhythmFullDev) / (params.rhythmZeroDev - params.rhythmFullDev);
     }
     return (f * 100).toInt().clamp(0, 100).toInt();
   }
 
-  static double _coverageToFactor(double ratio) {
-    if (ratio >= _coverageFullRatio) return 1;
-    if (ratio <= _coverageZeroRatio) return _coverageMinFactor;
+  static double _coverageToFactor(double ratio, DtwParams params) {
+    if (ratio >= params.coverageFullRatio) return 1;
+    if (ratio <= params.coverageZeroRatio) return params.coverageMinFactor;
     final t =
-        (ratio - _coverageZeroRatio) / (_coverageFullRatio - _coverageZeroRatio);
-    return _coverageMinFactor + t * (1 - _coverageMinFactor);
+        (ratio - params.coverageZeroRatio) / (params.coverageFullRatio - params.coverageZeroRatio);
+    return params.coverageMinFactor + t * (1 - params.coverageMinFactor);
   }
 
   static int _applyFactor(int score, double factor) =>
       (score * factor).toInt().clamp(0, 100).toInt();
 
-  static double _mirrorToFactor(double directAvg, double mirrorAvg) {
+  static double _mirrorToFactor(
+      double directAvg, double mirrorAvg, DtwParams params) {
     if (directAvg <= 1e-4 || mirrorAvg >= directAvg) return 1;
     final severity =
         ((directAvg - mirrorAvg) / directAvg).clamp(0.0, 1.0).toDouble();
-    if (severity >= _mirrorFullSeverity) return _mirrorMinFactor;
-    final t = severity / _mirrorFullSeverity;
-    return 1 - t * (1 - _mirrorMinFactor);
+    if (severity >= params.mirrorFullSeverity) return params.mirrorMinFactor;
+    final t = severity / params.mirrorFullSeverity;
+    return 1 - t * (1 - params.mirrorMinFactor);
   }
 
-  static double _motionEnergy(
-      List<List<double>> frames, int featureSize, List<double> weights) {
+  static double _motionEnergy(List<List<double>> frames, int featureSize,
+      List<double> weights, DtwParams params) {
     if (frames.length < 2) return 0;
     var total = 0.0;
     for (var i = 1; i < frames.length; i++) {
       total += _normalizedEuclideanDist(
-          frames[i], frames[i - 1], featureSize, weights);
+          frames[i], frames[i - 1], featureSize, weights, params);
     }
     return total / (frames.length - 1);
   }
 
-  static List<List<double>> _smooth(List<List<double>> frames) {
+  static List<List<double>> _smooth(
+      List<List<double>> frames, DtwParams params) {
     final size = frames.length;
     if (size <= 2) return frames;
-    const half = _smoothWindow ~/ 2;
+    final half = params.smoothWindow ~/ 2;
     final featSize = frames[0].length;
     return List.generate(size, (i) {
       final start = math.max(i - half, 0);
@@ -406,12 +354,12 @@ class DtwComparator {
     });
   }
 
-  static double _normalizedEuclideanDist(
-      List<double> v1, List<double> v2, int size, List<double> weights) {
+  static double _normalizedEuclideanDist(List<double> v1, List<double> v2,
+      int size, List<double> weights, DtwParams params) {
     var sum = 0.0;
     var wsum = 0.0;
     for (var i = 0; i < size; i++) {
-      final range = i < _featureRanges.length ? _featureRanges[i] : 1.0;
+      final range = i < params.featureRanges.length ? params.featureRanges[i] : 1.0;
       final diff = (v1[i] - v2[i]) / range;
       sum += weights[i] * diff * diff;
       wsum += weights[i];
@@ -419,11 +367,11 @@ class DtwComparator {
     return wsum > 0 ? math.sqrt(sum / wsum) : 0.0;
   }
 
-  static List<double> _componentDistances(
-      List<double> v1, List<double> v2, int size, List<double> weights) {
+  static List<double> _componentDistances(List<double> v1, List<double> v2,
+      int size, List<double> weights, DtwParams params) {
     final len = math.min(v1.length, size);
     return List<double>.generate(len, (it) {
-      final range = it < _featureRanges.length ? _featureRanges[it] : 1.0;
+      final range = it < params.featureRanges.length ? params.featureRanges[it] : 1.0;
       return weights[it] * (v1[it] - v2[it]).abs() / range;
     });
   }

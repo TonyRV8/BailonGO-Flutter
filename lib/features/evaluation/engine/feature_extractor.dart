@@ -14,7 +14,8 @@ class FeatureExtractor {
   FeatureExtractor._();
 
   /// Número total de features del vector.
-  static const int featureCount = 22;
+  /// 15 tren inferior + 7 tren superior + 4 de cadera.
+  static const int featureCount = 26;
 
   // Tren inferior.
   static const int _leftHip = 23;
@@ -80,6 +81,7 @@ class FeatureExtractor {
     final lFoot = _footFeatures(lm[_leftHeel], lm[_leftFootIndex], hipDist);
     final rFoot = _footFeatures(lm[_rightHeel], lm[_rightFootIndex], hipDist);
     final upper = _upperFeatures(lm);
+    final hips = _hipFeatures(lm, lHip, rHip, hipDist);
 
     final raw = <double>[
       _angleDeg(lHip, lKnee, lAnkle), // 0
@@ -98,6 +100,7 @@ class FeatureExtractor {
       lFoot.$2, // 13
       rFoot.$2, // 14
       ...upper, // 15–21
+      ...hips, // 22–25
     ];
 
     return isMirrored ? mirrorFeatures(raw) : raw;
@@ -132,6 +135,15 @@ class FeatureExtractor {
       m[19] = -f[18];
       m[20] = f[21]; // wrist Y rel: solo swap
       m[21] = f[20];
+    }
+    // Cadera (22–25). Al reflejar, la cadera que estaba alta pasa a estar baja
+    // y el desplazamiento lateral cambia de signo; la altura y la rotación no
+    // dependen de la lateralidad.
+    if (f.length >= 26) {
+      m[22] = -f[22]; // inclinación
+      m[23] = -f[23]; // desplazamiento lateral
+      m[24] = f[24]; // altura
+      m[25] = f[25]; // rotación
     }
     return m;
   }
@@ -179,6 +191,49 @@ class FeatureExtractor {
     }
 
     return [armAngleL, armAngleR, shoulderTilt, wristLX, wristRX, wristLY, wristRY];
+  }
+
+  /// Cadera (landmarks 23 y 24). Hasta ahora la cadera solo servía de ancla de
+  /// normalización (`hipDist` fija la escala, `hipCenterX` el origen), así que
+  /// su movimiento propio era invisible para el motor — una carencia seria en
+  /// salsa, donde el acento de cadera es parte del paso.
+  ///
+  /// Las tres últimas se miden CONTRA LOS HOMBROS a propósito: referirlas a la
+  /// propia cadera las haría constantes por construcción. Si los hombros no
+  /// son visibles quedan a 0 (neutras), igual que el resto del tren superior.
+  /// La inclinación (22) solo necesita las caderas, que son landmarks críticos
+  /// y por tanto siempre están.
+  ///
+  ///   22 inclinación de cadera  (una cadera más alta que la otra)
+  ///   23 desplazamiento lateral de cadera respecto al torso  <- el acento
+  ///   24 altura de cadera respecto al torso (flexión / rebote)
+  ///   25 rotación de cadera: al girar, el ancho proyectado se estrecha
+  static List<double> _hipFeatures(
+    List<PoseLandmark?> lm,
+    PoseLandmark lHip,
+    PoseLandmark rHip,
+    double hipDist,
+  ) {
+    final hipTilt = (lHip.y - rHip.y) / hipDist;
+
+    var swayX = 0.0, swayY = 0.0, rotation = 0.0;
+    final lS = lm[_leftShoulder];
+    final rS = lm[_rightShoulder];
+    final shouldersOk = (lS?.confidence ?? 0) >= _minVisibility &&
+        (rS?.confidence ?? 0) >= _minVisibility;
+    if (shouldersOk) {
+      final shoulderDist = _euclidean(lS!.x, lS.y, rS!.x, rS.y);
+      if (shoulderDist > 0.001) {
+        final scX = (lS.x + rS.x) / 2;
+        final scY = (lS.y + rS.y) / 2;
+        final hcX = (lHip.x + rHip.x) / 2;
+        final hcY = (lHip.y + rHip.y) / 2;
+        swayX = (hcX - scX) / shoulderDist;
+        swayY = (hcY - scY) / shoulderDist;
+        rotation = hipDist / shoulderDist;
+      }
+    }
+    return [hipTilt, swayX, swayY, rotation];
   }
 
   static (double, double) _footFeatures(

@@ -22,7 +22,9 @@ class DanceStep {
   /// URL del video ideal en bucle (RF-07). `null` hasta grabar las tomas.
   final String? mediaUrl;
 
-  /// Duración de un ciclo del paso, en segundos (define la ventana de captura).
+  /// Duración de la toma de referencia, en segundos. Es la ventana de
+  /// evaluación real: `evaluation_page._startCapture` la deriva de
+  /// `refFrames.length * 33 ms`, que equivale a la duración del video ideal.
   final double duracionCicloSeg;
 
   /// Peso por feature (longitud = nº de features) para la evaluación. Permite

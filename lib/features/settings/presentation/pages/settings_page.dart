@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show Clipboard, ClipboardData;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/config/app_constants.dart';
@@ -83,7 +84,7 @@ class SettingsPage extends ConsumerWidget {
           const Divider(),
           const _SeedCatalogTile(),
           const _UploadReferenceTile(),
-          const _ValidateEngineTile(),
+          const _CalibrateEngineTile(),
           const _ResetTestProgressTile(),
         ],
       ],
@@ -138,8 +139,10 @@ class _SeedCatalogTileState extends ConsumerState<_SeedCatalogTile> {
   }
 }
 
-/// Dev: extrae la referencia del paso de prueba y la sube a Firestore
-/// (REFERENCE_DATA) para que la evaluación cargue al instante.
+/// Dev: extrae los landmarks de los videos ideales de los 9 pasos reales y los
+/// sube a Firestore (REFERENCE_DATA) para que la evaluación cargue al instante.
+/// Requiere abrir temporalmente la escritura de `reference_data` en las reglas
+/// (implementar_pasos.txt §6.2).
 class _UploadReferenceTile extends ConsumerStatefulWidget {
   const _UploadReferenceTile();
 
@@ -155,89 +158,26 @@ class _UploadReferenceTileState extends ConsumerState<_UploadReferenceTile> {
     setState(() => _busy = true);
     final messenger = ScaffoldMessenger.of(context);
     try {
-      final steps = kCatalogSeed
-          .where((s) => kTestStepIds.contains(s.id))
-          .toList(growable: false);
-      final n = await ref
+      final steps = kRealSteps.where((s) => s.hasVideo).toList(growable: false);
+      final byStep = await ref
           .read(referenceRepositoryProvider)
           .extractAndUploadAll(steps);
-      messenger.showSnackBar(
-        SnackBar(
-            content: Text(
-                'Referencia subida para ${steps.length} pasos: $n frames.')),
-      );
-    } catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text('Error: $e')));
-    } finally {
-      if (mounted) setState(() => _busy = false);
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return ListTile(
-      leading: const Icon(Icons.upload_file_outlined),
-      title: const Text('Subir referencia (dev)'),
-      subtitle:
-          const Text('Extrae los pasos de prueba y los guarda en Firestore.'),
-      trailing: _busy
-          ? const SizedBox(
-              width: 18, height: 18,
-              child: CircularProgressIndicator(strokeWidth: 2))
-          : const Icon(Icons.chevron_right),
-      onTap: _busy ? null : _run,
-    );
-  }
-}
-
-/// Dev: corre el motor sobre los fixtures (good/bad.mov vs ref.mov) y muestra
-/// los scores. `good` debe dar alto y `bad` bajo.
-class _ValidateEngineTile extends ConsumerStatefulWidget {
-  const _ValidateEngineTile();
-
-  @override
-  ConsumerState<_ValidateEngineTile> createState() =>
-      _ValidateEngineTileState();
-}
-
-class _ValidateEngineTileState extends ConsumerState<_ValidateEngineTile> {
-  bool _busy = false;
-
-  Future<void> _run() async {
-    setState(() => _busy = true);
-    final messenger = ScaffoldMessenger.of(context);
-    try {
-      final proc = ref.read(videoPoseProcessorProvider);
-      final refF = await proc.processAsset('assets/fixtures/ref.mov');
-      final goodF = await proc.processAsset('assets/fixtures/good.mov');
-      final badF = await proc.processAsset('assets/fixtures/bad.mov');
-      // Usa los pesos del paso de prueba (tren superior).
-      final weights =
-          kCatalogSeed.firstWhere((s) => s.id == 'paso_prueba').weights;
-      final good = DtwComparator.compare(goodF, refF, weights: weights);
-      final bad = DtwComparator.compare(badF, refF, weights: weights);
       if (!mounted) return;
-      String worst(DtwResult result) {
-        final i = result.worstComponentIndex;
-        return (i >= 0 && i < DtwResult.componentNames.length)
-            ? DtwResult.componentNames[i]
-            : '?';
-      }
-
+      // Verificación de implementar_pasos.txt §3: frameCount debe acercarse a
+      // duracion_ms / 33. Muy por debajo = se perdieron fotogramas por falta de
+      // visibilidad del tren inferior y la ventana de captura se desincroniza.
+      final lines = steps.map((s) {
+        final got = byStep[s.id] ?? 0;
+        final expected = (s.duracionCicloSeg * 1000 / 33).round();
+        final pct = expected > 0 ? got * 100 ~/ expected : 0;
+        return '${pct >= 90 ? "OK " : "!! "}${s.id}: $got/$expected ($pct%)';
+      }).join('\n');
       await showDialog<void>(
         context: context,
         builder: (_) => AlertDialog(
-          title: const Text('Validación del motor'),
+          title: const Text('Referencia subida'),
           content: SingleChildScrollView(
-            child: Text(
-              'frames válidos → ref ${refF.length} | good ${goodF.length} | bad ${badF.length}\n\n'
-              'GOOD vs ref → total ${good.score}% '
-              '(align ${good.alignmentScore}, ritmo ${good.rhythmScore})\n'
-              'normCost ${good.normalizedCost.toStringAsFixed(3)} | peor: ${worst(good)}\n\n'
-              'BAD vs ref → total ${bad.score}% '
-              '(align ${bad.alignmentScore}, ritmo ${bad.rhythmScore})\n'
-              'normCost ${bad.normalizedCost.toStringAsFixed(3)} | peor: ${worst(bad)}',
-            ),
+            child: Text('fotogramas válidos / esperados\n\n$lines'),
           ),
           actions: [
             TextButton(
@@ -256,9 +196,122 @@ class _ValidateEngineTileState extends ConsumerState<_ValidateEngineTile> {
   @override
   Widget build(BuildContext context) {
     return ListTile(
+      leading: const Icon(Icons.upload_file_outlined),
+      title: const Text('Subir referencia (dev)'),
+      subtitle: Text(
+          'Extrae los ${kRealSteps.length} pasos reales y los guarda en '
+          'Firestore.'),
+      trailing: _busy
+          ? const SizedBox(
+              width: 18, height: 18,
+              child: CircularProgressIndicator(strokeWidth: 2))
+          : const Icon(Icons.chevron_right),
+      onTap: _busy ? null : _run,
+    );
+  }
+}
+
+/// Dev: banco de calibración (implementar_pasos.txt §7.1).
+///
+/// Para cada paso real compara la toma ideal contra sí misma y la toma regular
+/// (la que la experta puntúa 4-6/10) contra la ideal. Objetivos:
+///   ideal vs ideal    → 95-100 %  (control: debe ser trivialmente alto)
+///   regular vs ideal  → 40-60 %   (etiqueta de la experta)
+/// La tabla resultante se copia al portapapeles para pegarla en la memoria.
+class _CalibrateEngineTile extends ConsumerStatefulWidget {
+  const _CalibrateEngineTile();
+
+  @override
+  ConsumerState<_CalibrateEngineTile> createState() =>
+      _CalibrateEngineTileState();
+}
+
+class _CalibrateEngineTileState extends ConsumerState<_CalibrateEngineTile> {
+  bool _busy = false;
+  String _progress = '';
+
+  static String _worst(DtwResult r) {
+    final i = r.worstComponentIndex;
+    return (i >= 0 && i < DtwResult.componentNames.length)
+        ? DtwResult.componentNames[i]
+        : '?';
+  }
+
+  Future<void> _run() async {
+    setState(() {
+      _busy = true;
+      _progress = '';
+    });
+    final messenger = ScaffoldMessenger.of(context);
+    final proc = ref.read(videoPoseProcessorProvider);
+    final buffer = StringBuffer()
+      ..writeln('BANCO DE CALIBRACIÓN — ${DateTime.now()}')
+      ..writeln('objetivo: ideal 95-100 % | regular 40-60 %')
+      ..writeln('');
+
+    final steps = kRealSteps.where((s) => s.hasVideo).toList(growable: false);
+    try {
+      for (final step in steps) {
+        if (!mounted) return;
+        setState(() => _progress = step.id);
+        final idealF = await proc.processAsset(step.mediaUrl!);
+        final regF = await proc.processAsset(regularFixtureFor(step.id));
+        if (idealF.isEmpty || regF.isEmpty) {
+          buffer.writeln('${step.id}: SIN FOTOGRAMAS VÁLIDOS '
+              '(ideal ${idealF.length}, regular ${regF.length})');
+          continue;
+        }
+        final self =
+            DtwComparator.compare(idealF, idealF, weights: step.weights);
+        final reg = DtwComparator.compare(regF, idealF, weights: step.weights);
+        buffer
+          ..writeln(step.id)
+          ..writeln('  fotogramas   ideal ${idealF.length} | regular ${regF.length}')
+          ..writeln('  ideal-vs-ideal   ${self.score} %')
+          ..writeln('  regular-vs-ideal ${reg.score} % '
+              '(align ${reg.alignmentScore}, ritmo ${reg.rhythmScore})')
+          ..writeln('  normCost ${reg.normalizedCost.toStringAsFixed(3)} '
+              '| peor: ${_worst(reg)}')
+          ..writeln('');
+      }
+      final report = buffer.toString();
+      await Clipboard.setData(ClipboardData(text: report));
+      if (!mounted) return;
+      await showDialog<void>(
+        context: context,
+        builder: (_) => AlertDialog(
+          title: const Text('Banco de calibración'),
+          content: SingleChildScrollView(
+            child: SelectableText(report,
+                style: const TextStyle(fontFamily: 'monospace', fontSize: 12)),
+          ),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.of(context).pop(),
+                child: const Text('OK (copiado)')),
+          ],
+        ),
+      );
+    } catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text('Error: $e')));
+    } finally {
+      if (mounted) {
+        setState(() {
+          _busy = false;
+          _progress = '';
+        });
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return ListTile(
       leading: const Icon(Icons.science_outlined),
-      title: const Text('Validar motor (dev)'),
-      subtitle: const Text('good/bad.mov vs ref.mov → scores.'),
+      title: const Text('Calibrar motor (dev)'),
+      subtitle: Text(_busy
+          ? 'Procesando $_progress…'
+          : 'Tomas ideales vs regulares de los ${kRealSteps.length} pasos.'),
       trailing: _busy
           ? const SizedBox(
               width: 18, height: 18,

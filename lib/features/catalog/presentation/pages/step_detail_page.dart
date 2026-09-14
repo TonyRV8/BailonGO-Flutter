@@ -42,7 +42,7 @@ class StepDetailPage extends ConsumerWidget {
             children: [
               const Icon(Icons.timer_outlined, size: 16),
               const SizedBox(width: 4),
-              Text('Ciclo: ${step.duracionCicloSeg.toStringAsFixed(0)} s',
+              Text('Duración: ${step.duracionCicloSeg.toStringAsFixed(0)} s',
                   style: theme.textTheme.bodySmall),
             ],
           ),
@@ -159,7 +159,9 @@ class _VideoPanelState extends State<_VideoPanel>
     try {
       await controller.initialize();
       await controller.setLooping(true);
-      await controller.setVolume(0); // bucle silencioso, es referencia visual
+      // El video lleva la música incrustada: suena y se repite con cada
+      // vuelta del bucle (setLooping ya está activo).
+      await controller.setVolume(1);
       await controller.play();
       if (mounted) setState(() {});
     } catch (_) {
@@ -181,43 +183,58 @@ class _VideoPanelState extends State<_VideoPanel>
     final controller = _controller;
     final ready = controller != null && controller.value.isInitialized;
 
-    return AspectRatio(
-      aspectRatio: 16 / 9,
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(12),
-        child: Container(
-          color: theme.colorScheme.surfaceContainerHighest,
-          alignment: Alignment.center,
-          child: ready
-              ? FittedBox(
-                  fit: BoxFit.contain,
-                  child: SizedBox(
-                    width: controller.value.size.width,
-                    height: controller.value.size.height,
-                    child: VideoPlayer(controller),
-                  ),
-                )
-              : Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(
-                      _failed
-                          ? Icons.error_outline
-                          : Icons.videocam_outlined,
-                      size: 48,
-                      color: theme.colorScheme.primary,
+    // Las tomas están grabadas en vertical (720x1280). Se usa la relación de
+    // aspecto REAL del video en vez de un 16/9 fijo, que dejaba el video
+    // diminuto entre dos bandas muertas. Mientras carga se reserva 9/16 para
+    // que el panel no dé un salto al aparecer el primer fotograma.
+    final ratio = ready ? controller.value.aspectRatio : 9 / 16;
+    // Tope de altura: un 9/16 a ancho completo ocuparía casi toda la pantalla y
+    // empujaría título, descripción y botones fuera de vista.
+    final maxHeight = MediaQuery.of(context).size.height * 0.55;
+
+    return Center(
+      child: ConstrainedBox(
+        constraints: BoxConstraints(maxHeight: maxHeight),
+        child: AspectRatio(
+          aspectRatio: ratio,
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(12),
+            child: Container(
+              color: theme.colorScheme.surfaceContainerHighest,
+              alignment: Alignment.center,
+              child: ready
+                  ? FittedBox(
+                      fit: BoxFit.contain,
+                      child: SizedBox(
+                        width: controller.value.size.width,
+                        height: controller.value.size.height,
+                        child: VideoPlayer(controller),
+                      ),
+                    )
+                  : Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          _failed
+                              ? Icons.error_outline
+                              : Icons.videocam_outlined,
+                          size: 48,
+                          color: theme.colorScheme.primary,
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          _failed
+                              ? 'No se pudo reproducir el video'
+                              : _hasVideo
+                                  ? 'Cargando video…'
+                                  : 'Video pendiente de grabación',
+                          style: theme.textTheme.bodyMedium,
+                          textAlign: TextAlign.center,
+                        ),
+                      ],
                     ),
-                    const SizedBox(height: 8),
-                    Text(
-                      _failed
-                          ? 'No se pudo reproducir el video'
-                          : _hasVideo
-                              ? 'Cargando video…'
-                              : 'Video pendiente de grabación',
-                      style: theme.textTheme.bodyMedium,
-                    ),
-                  ],
-                ),
+            ),
+          ),
         ),
       ),
     );

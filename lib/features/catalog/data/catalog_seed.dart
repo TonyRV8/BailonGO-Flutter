@@ -1,23 +1,17 @@
+import '../domain/step_weights.dart';
 import 'models/dance_step_model.dart';
-
-/// Pesos por feature (22 = 15 tren inferior + 7 tren superior). Cada paso elige
-/// qué landmarks importan. Ver `FeatureExtractor` para el orden de las features.
-const List<double> _legsWeights = [
-  1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, // 0–14 piernas
-  0, 0, 0, 0, 0, 0, 0, //                          15–21 brazos (ignorados)
-];
-const List<double> _armsWeights = [
-  0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, // 0–14 piernas (ignoradas)
-  1, 1, 1, 1, 1, 1, 1, //                          15–21 brazos
-];
 
 /// Catálogo canónico: 9 pasos WSF nivel Bronce (plan.txt §1, doc 5.7) + un paso
 /// de prueba. Fuente única de verdad: siembra Firestore y sirve de fallback
 /// offline.
 ///
-/// `mediaUrl` queda `null` hasta grabar las 2 tomas por paso (plan.txt §8).
-/// Los 9 pasos de cumbia ponderan el tren inferior; el paso de prueba (baile de
-/// brazos) pondera el tren superior.
+/// Los videos ideales viven empaquetados en `assets/videos/<pasoId>.mp4`
+/// (720x1280, 30 fps, música incluida). De ellos se extraen los landmarks UNA
+/// sola vez y se suben a `reference_data` (ver implementar_pasos.txt §6).
+///
+/// `duracionCicloSeg` es la duración real de la toma, que es exactamente la
+/// ventana de evaluación: `evaluation_page._startCapture` la deriva de
+/// `refFrames.length * 33 ms`.
 const List<DanceStepModel> kCatalogSeed = [
   DanceStepModel(
     id: 'basico_adelante_atras',
@@ -26,8 +20,9 @@ const List<DanceStepModel> kCatalogSeed = [
         'Paso base de la cumbia: desplazamiento adelante y atrás manteniendo '
         'el peso en la planta y el ritmo constante.',
     orden: 1,
-    duracionCicloSeg: 4,
-    weights: _legsWeights,
+    mediaUrl: 'assets/videos/basico_adelante_atras.mp4',
+    duracionCicloSeg: 19,
+    weights: wBasicoAdelanteAtras,
   ),
   DanceStepModel(
     id: 'basico_guapeo',
@@ -36,8 +31,9 @@ const List<DanceStepModel> kCatalogSeed = [
         'Variante del básico con acento de cadera y hombros (guapeo), sin '
         'desplazar los pies del eje.',
     orden: 2,
-    duracionCicloSeg: 4,
-    weights: _legsWeights,
+    mediaUrl: 'assets/videos/basico_guapeo.mp4',
+    duracionCicloSeg: 14,
+    weights: wBasicoGuapeo,
   ),
   DanceStepModel(
     id: 'cucaracha',
@@ -46,8 +42,9 @@ const List<DanceStepModel> kCatalogSeed = [
         'Pisada lateral con presión al piso alternando pie izquierdo y '
         'derecho, recuperando el peso al centro.',
     orden: 3,
-    duracionCicloSeg: 4,
-    weights: _legsWeights,
+    mediaUrl: 'assets/videos/cucaracha.mp4',
+    duracionCicloSeg: 18,
+    weights: wCucaracha,
   ),
   DanceStepModel(
     id: 'suzy_q',
@@ -56,16 +53,18 @@ const List<DanceStepModel> kCatalogSeed = [
         'Cruce de talones y puntas desplazándose lateralmente, con giro de '
         'rodillas coordinado.',
     orden: 4,
-    duracionCicloSeg: 4,
-    weights: _legsWeights,
+    mediaUrl: 'assets/videos/suzy_q.mp4',
+    duracionCicloSeg: 10,
+    weights: wSuzyQ,
   ),
   DanceStepModel(
     id: 'right_spot_turn',
     nombre: 'Right Spot Turn',
     descripcion: 'Giro a la derecha sobre el propio eje en tres tiempos.',
     orden: 5,
-    duracionCicloSeg: 4,
-    weights: _legsWeights,
+    mediaUrl: 'assets/videos/right_spot_turn.mp4',
+    duracionCicloSeg: 12,
+    weights: wRightSpotTurn,
   ),
   DanceStepModel(
     id: 'cumbia_step',
@@ -74,8 +73,9 @@ const List<DanceStepModel> kCatalogSeed = [
         'Paso característico de cumbia con arrastre lateral y marca de tiempo '
         'en el pie de apoyo.',
     orden: 6,
-    duracionCicloSeg: 4,
-    weights: _legsWeights,
+    mediaUrl: 'assets/videos/cumbia_step.mp4',
+    duracionCicloSeg: 19.33,
+    weights: wCumbiaStep,
   ),
   DanceStepModel(
     id: 'cuban_break',
@@ -84,8 +84,9 @@ const List<DanceStepModel> kCatalogSeed = [
         'Quiebre cubano: cambio de dirección con acento sincopado y juego de '
         'cadera.',
     orden: 7,
-    duracionCicloSeg: 4,
-    weights: _legsWeights,
+    mediaUrl: 'assets/videos/cuban_break.mp4',
+    duracionCicloSeg: 14,
+    weights: wCubanBreak,
   ),
   DanceStepModel(
     id: 'giro_punta_talon',
@@ -94,8 +95,9 @@ const List<DanceStepModel> kCatalogSeed = [
         'Giro apoyando alternadamente punta y talón para rotar el cuerpo de '
         'forma controlada.',
     orden: 8,
-    duracionCicloSeg: 4,
-    weights: _legsWeights,
+    mediaUrl: 'assets/videos/giro_punta_talon.mp4',
+    duracionCicloSeg: 21,
+    weights: wGiroPuntaTalon,
   ),
   DanceStepModel(
     id: 'kick_flick',
@@ -104,8 +106,9 @@ const List<DanceStepModel> kCatalogSeed = [
         'Patada baja seguida de un flick (latigazo) del pie, manteniendo el '
         'equilibrio sobre la pierna de apoyo.',
     orden: 9,
-    duracionCicloSeg: 4,
-    weights: _legsWeights,
+    mediaUrl: 'assets/videos/kick_flick.mp4',
+    duracionCicloSeg: 13,
+    weights: wKickFlick,
   ),
   // Paso 10 de PRUEBA: baile de brazos. Usa el video de referencia real
   // (ref.mov) y pondera el tren superior. Valida el pipeline con good/bad.mov.
@@ -118,7 +121,7 @@ const List<DanceStepModel> kCatalogSeed = [
     orden: 10,
     mediaUrl: 'assets/videos/ref.mov',
     duracionCicloSeg: 8,
-    weights: _armsWeights,
+    weights: armsWeights,
   ),
   // Pasos 11 y 12: copias del paso de prueba para testear la sincronización
   // de la mejor marca (history) por paso. TEMPORALES: quitar junto con
@@ -132,7 +135,7 @@ const List<DanceStepModel> kCatalogSeed = [
     orden: 11,
     mediaUrl: 'assets/videos/ref.mov',
     duracionCicloSeg: 8,
-    weights: _armsWeights,
+    weights: armsWeights,
   ),
   DanceStepModel(
     id: 'paso_prueba_3',
@@ -143,10 +146,21 @@ const List<DanceStepModel> kCatalogSeed = [
     orden: 12,
     mediaUrl: 'assets/videos/ref.mov',
     duracionCicloSeg: 8,
-    weights: _armsWeights,
+    weights: armsWeights,
   ),
 ];
 
 /// Ids de los pasos de prueba (para dev tools: subir referencia / borrar
 /// progreso). TEMPORAL.
 const List<String> kTestStepIds = ['paso_prueba', 'paso_prueba_2', 'paso_prueba_3'];
+
+/// Los 9 pasos reales del catálogo (excluye los de prueba). Es lo que usan las
+/// herramientas dev de "Subir referencia" y "Calibrar motor".
+List<DanceStepModel> get kRealSteps => kCatalogSeed
+    .where((s) => !kTestStepIds.contains(s.id))
+    .toList(growable: false);
+
+/// Ruta del fixture de la toma "regular" (4-6/10) de un paso, usada solo para
+/// calibrar. No se entrega en el APK final (ver .gitignore y pubspec).
+String regularFixtureFor(String pasoId) =>
+    'assets/fixtures/${pasoId}_regular.mp4';
