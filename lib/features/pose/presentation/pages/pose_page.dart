@@ -34,7 +34,7 @@ class _PosePageState extends ConsumerState<PosePage>
   String? _error;
 
   bool _busy = false; // un fotograma en proceso a la vez
-  PoseFrame? _frame;
+  final ValueNotifier<PoseFrame> _frames = ValueNotifier(PoseFrame.empty);
 
   // RNF-05: tren inferior con baja confianza sostenida > 1 s -> inválido.
   DateTime? _lowConfSince;
@@ -104,7 +104,7 @@ class _PosePageState extends ConsumerState<PosePage>
             rotationDegrees: data.rotationDegrees,
           );
       _evaluateConfidence(frame);
-      if (mounted) setState(() => _frame = frame);
+      if (mounted) _frames.value = frame;
     } catch (_) {
       // Fotograma descartado; el siguiente reintenta.
     } finally {
@@ -189,22 +189,27 @@ class _PosePageState extends ConsumerState<PosePage>
   Widget _buildPreview() {
     final controller = _controller!;
     final isFront = _camera?.lensDirection == CameraLensDirection.front;
-    final frame = _frame;
 
     return Stack(
       fit: StackFit.expand,
       children: [
         CameraPreview(controller),
-        if (frame != null)
-          CustomPaint(painter: PosePainter(frame: frame, isFront: isFront)),
+        RepaintBoundary(
+          child: CustomPaint(
+            painter: PosePainter(frames: _frames, isFront: isFront),
+          ),
+        ),
         // Estado de detección.
         Positioned(
           top: 12,
           left: 12,
           right: 12,
-          child: _StatusBanner(
-            invalid: _bodyInvalid,
-            hasBody: frame?.hasBody ?? false,
+          child: ValueListenableBuilder<PoseFrame>(
+            valueListenable: _frames,
+            builder: (_, frame, __) => _StatusBanner(
+              invalid: _bodyInvalid,
+              hasBody: frame.hasBody,
+            ),
           ),
         ),
       ],

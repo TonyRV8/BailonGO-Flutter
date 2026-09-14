@@ -1,13 +1,15 @@
 import 'dart:async';
 import 'dart:io' show Platform;
 
+import 'package:audioplayers/audioplayers.dart';
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart' show DeviceOrientation;
+import 'package:flutter/services.dart' show DeviceOrientation, HapticFeedback;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:permission_handler/permission_handler.dart';
 
+import '../../../../core/config/app_constants.dart';
 import '../../../../core/router/app_routes.dart';
 import '../../../auth/presentation/providers/auth_providers.dart';
 import '../../../catalog/domain/entities/dance_step.dart';
@@ -21,7 +23,10 @@ import '../../domain/evaluation_feedback.dart';
 import '../../engine/dtw_comparator.dart';
 import '../../engine/dtw_result.dart';
 import '../../engine/feature_extractor.dart';
+import '../../engine/retry_gesture_detector.dart';
+import '../../engine/start_gesture_detector.dart';
 import '../providers/evaluation_providers.dart';
+import '../widgets/arming_overlay.dart';
 import '../widgets/results_sheet.dart';
 
 // La referencia se extrae con isMirrored=false; la captura en vivo se procesa
@@ -29,7 +34,26 @@ import '../widgets/results_sheet.dart';
 // invertida en el dispositivo, el usuario activa "Corregir lateralidad" en
 // Configuración (users.settings.mirrorCapture).
 
-enum _Phase { preparing, noVideo, ready, countdown, capturing, computing, error, denied }
+enum _Phase {
+  preparing,
+  noVideo,
+
+  /// Cámara viva esperando la señal del usuario, sin reloj corriendo
+  /// (RF-08.1). Es la primera fase visible: al entrar al paso no hay ningún
+  /// botón intermedio que pulsar.
+  arming,
+
+  countdown,
+  capturing,
+  computing,
+
+  /// Modal de resultados abierto. La cámara sigue viva por debajo para poder
+  /// reintentar con las manos en la cintura (RF-11).
+  results,
+
+  error,
+  denied,
+}
 
 /// Flujo de evaluación end-to-end (RF-08..RF-11).
 class EvaluationPage extends ConsumerStatefulWidget {
@@ -41,7 +65,8 @@ class EvaluationPage extends ConsumerStatefulWidget {
   ConsumerState<EvaluationPage> createState() => _EvaluationPageState();
 }
 
-class _EvaluationPageState extends ConsumerState<EvaluationPage> {
+class _EvaluationPageState extends ConsumerState<EvaluationPage>
+    with SingleTickerProviderStateMixin {
   CameraController? _controller;
   CameraDescription? _camera;
 
@@ -52,18 +77,69 @@ class _EvaluationPageState extends ConsumerState<EvaluationPage> {
   List<List<double>> _refFrames = const [];
 
   bool _busy = false;
-  PoseFrame? _frame;
+  final ValueNotifier<PoseFrame> _frames = ValueNotifier(PoseFrame.empty);
   final List<List<double>> _userFrames = [];
 
-  int _countdown = 3;
+  /// Durante el armado no hace falta inferir a 30 fps: el detector trabaja por
+  /// tiempo, no por fotogramas. Procesar 1 de cada 2 baja a la mitad el consumo
+  /// en una espera que puede durar minutos.
+  int _armingSkip = 0;
+
+  int _countdown = AppConstants.countdownSeconds;
+  bool _showGo = false;
+
+  // Armado previo al conteo (RF-08.1..08.5).
+  final StartGestureDetector _gesture = StartGestureDetector(
+    stillnessHold: const Duration(seconds: AppConstants.stillnessSeconds),
+  );
+  ArmingStatus _arming = const ArmingStatus(ArmingState.noBody);
+
+  // Reintento por gesto desde el modal de resultados (RF-11).
+  final RetryGestureDetector _retryGesture = RetryGestureDetector();
+  bool _resultsOpen = false;
   Timer? _countdownTimer;
+  Timer? _goTimer;
   Timer? _captureTimer;
   double _progress = 0;
+
+  // Conteo audible (RF-08): un pitido por numero y uno largo al arrancar.
+  static final _tickSound = AssetSource('sounds/tick.wav');
+  static final _goSound = AssetSource('sounds/go.wav');
+  final AudioPlayer _tickPlayer = AudioPlayer(playerId: 'countdown_tick');
+  final AudioPlayer _goPlayer = AudioPlayer(playerId: 'countdown_go');
+
+  // Pulso de entrada de cada numero del conteo.
+  late final AnimationController _pulse;
 
   @override
   void initState() {
     super.initState();
+    _pulse = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 900),
+    );
+    _initAudio();
     _init();
+  }
+
+  Future<void> _initAudio() async {
+    try {
+      // Sin robar el foco de audio: con el foco por defecto (gain) el pitido
+      // del conteo pausaba el video guía y la música que el usuario tuviera
+      // sonando, y ninguno se reanudaba solo.
+      await AudioPlayer.global.setAudioContext(
+        AudioContextConfig(focus: AudioContextConfigFocus.mixWithOthers)
+            .build(),
+      );
+      for (final e in {_tickPlayer: _tickSound, _goPlayer: _goSound}.entries) {
+        await e.key.setReleaseMode(ReleaseMode.stop);
+        await e.key.setVolume(1);
+        // Precarga para que el primer pitido no llegue tarde.
+        await e.key.setSource(e.value);
+      }
+    } catch (_) {
+      // Sin audio disponible: el conteo sigue siendo visual.
+    }
   }
 
   Future<void> _init() async {
@@ -88,7 +164,12 @@ class _EvaluationPageState extends ConsumerState<EvaluationPage> {
       _refFrames = refFrames;
 
       if (!mounted) return;
-      setState(() => _phase = refFrames.isEmpty ? _Phase.noVideo : _Phase.ready);
+      if (refFrames.isEmpty) {
+        setState(() => _phase = _Phase.noVideo);
+      } else {
+        // Sin paso intermedio: la cámara ya está lista, se arma directamente.
+        _startArming();
+      }
     } catch (e) {
       if (mounted) {
         setState(() {
@@ -124,6 +205,12 @@ class _EvaluationPageState extends ConsumerState<EvaluationPage> {
     if (_busy || !mounted) return;
     final camera = _camera;
     if (camera == null) return;
+    // Ni la espera ni el modal de resultados necesitan inferencia a 30 fps:
+    // ambos detectores trabajan por tiempo, no por fotogramas.
+    if ((_phase == _Phase.arming || _phase == _Phase.results) &&
+        (_armingSkip++ & 1) == 1) {
+      return;
+    }
     _busy = true;
     try {
       final data = cameraFrameFromImage(
@@ -144,8 +231,12 @@ class _EvaluationPageState extends ConsumerState<EvaluationPage> {
           isMirrored: ref.read(currentSettingsProvider).mirrorCapture,
         );
         if (v != null) _userFrames.add(v);
+      } else if (_phase == _Phase.arming) {
+        _updateArming(frame);
+      } else if (_phase == _Phase.results) {
+        _updateRetryGesture(frame);
       }
-      if (mounted) setState(() => _frame = frame);
+      if (mounted) _frames.value = frame;
     } catch (_) {
       // Fotograma descartado.
     } finally {
@@ -153,20 +244,96 @@ class _EvaluationPageState extends ConsumerState<EvaluationPage> {
     }
   }
 
-  void _startCountdown() {
+  /// Entra en espera activa: el conteo no arranca hasta que el usuario dé la
+  /// señal (brazos arriba o quietud) o pulse "Iniciar ahora".
+  void _startArming() {
+    _countdownTimer?.cancel();
+    _goTimer?.cancel();
+    _gesture
+      ..stillnessEnabled = ref.read(currentSettingsProvider).autoStartOnStill
+      ..start();
     setState(() {
-      _countdown = 3;
+      _showGo = false;
+      _arming = const ArmingStatus(ArmingState.noBody);
+      _phase = _Phase.arming;
+    });
+  }
+
+  /// Evalúa un fotograma durante el armado. Solo se llama a `setState` cuando
+  /// el estado visible cambia: el repintado a 30 fps ya lo hace `_onImage`.
+  void _updateArming(PoseFrame frame) {
+    final status = _gesture.update(frame);
+    if (status.isTriggered) {
+      _gesture.reset();
+      _startCountdown();
+      return;
+    }
+    final changed = status.state != _arming.state ||
+        (status.progress - _arming.progress).abs() > 0.02;
+    if (changed && mounted) setState(() => _arming = status);
+  }
+
+  /// Manos en la cintura sobre el resultado = reintentar sin acercarse al
+  /// teléfono. Cierra el modal con la misma acción que el botón "Reintentar".
+  void _updateRetryGesture(PoseFrame frame) {
+    if (!_resultsOpen) return;
+    if (!_retryGesture.update(frame)) return;
+    _resultsOpen = false;
+    HapticFeedback.mediumImpact();
+    // El modal es la ruta superior: se cierra devolviendo la acción de
+    // reintento, igual que si se hubiera pulsado el botón.
+    Navigator.of(context).pop(ResultsAction.retry);
+  }
+
+  void _startCountdown() {
+    _countdownTimer?.cancel();
+    _goTimer?.cancel();
+    setState(() {
+      _countdown = AppConstants.countdownSeconds;
+      _showGo = false;
       _phase = _Phase.countdown;
     });
-    _countdownTimer?.cancel();
+    _beat(_tickPlayer, _tickSound, HapticFeedback.mediumImpact);
     _countdownTimer = Timer.periodic(const Duration(seconds: 1), (t) {
       if (!mounted) return;
       if (_countdown <= 1) {
         t.cancel();
-        _startCapture();
+        _go();
       } else {
         setState(() => _countdown--);
+        _beat(_tickPlayer, _tickSound, HapticFeedback.mediumImpact);
       }
+    });
+  }
+
+  /// Marca visual + sonora de cada numero del conteo.
+  void _beat(
+    AudioPlayer player,
+    AssetSource sound,
+    Future<void> Function() haptic,
+  ) {
+    _pulse.forward(from: 0);
+    haptic();
+    _play(player, sound);
+  }
+
+  Future<void> _play(AudioPlayer player, AssetSource sound) async {
+    try {
+      await player.stop();
+      await player.play(sound);
+    } catch (_) {
+      // El conteo no depende del audio.
+    }
+  }
+
+  /// "YA": arranca la captura en el mismo instante que el pitido largo.
+  void _go() {
+    _beat(_goPlayer, _goSound, HapticFeedback.heavyImpact);
+    setState(() => _showGo = true);
+    _startCapture();
+    _goTimer?.cancel();
+    _goTimer = Timer(const Duration(milliseconds: 700), () {
+      if (mounted) setState(() => _showGo = false);
     });
   }
 
@@ -225,21 +392,31 @@ class _EvaluationPageState extends ConsumerState<EvaluationPage> {
 
   Future<void> _showResults(DtwResult result) async {
     final nextId = _nextStepId();
+    _retryGesture.start();
+    _resultsOpen = true;
+    setState(() => _phase = _Phase.results);
+
     final action = await showModalBottomSheet<ResultsAction>(
       context: context,
       isDismissible: false,
       isScrollControlled: true,
+      // La cámara sigue visible y viva por debajo del modal.
+      barrierColor: Colors.transparent,
       builder: (_) => ResultsSheet(
         result: result,
         feedback: buildFeedback(result),
         hasNext: nextId != null,
+        canGestureRetry: true,
       ),
     );
 
+    _resultsOpen = false;
+    _retryGesture.reset();
     if (!mounted) return;
     if (action == ResultsAction.retry) {
-      // La cámara sigue activa y la referencia en memoria: directo al conteo.
-      _startCountdown();
+      // La cámara sigue activa y la referencia en memoria, pero el usuario está
+      // lejos del teléfono: vuelve al armado para que se recoloque sin prisa.
+      _startArming();
     } else if (action == ResultsAction.next && nextId != null) {
       context.pushReplacement('${AppRoutes.evaluate}/$nextId');
     } else {
@@ -257,8 +434,15 @@ class _EvaluationPageState extends ConsumerState<EvaluationPage> {
 
   @override
   void dispose() {
+    _gesture.reset();
+    _retryGesture.reset();
+    _frames.dispose();
     _countdownTimer?.cancel();
+    _goTimer?.cancel();
     _captureTimer?.cancel();
+    _pulse.dispose();
+    _tickPlayer.dispose();
+    _goPlayer.dispose();
     _controller?.dispose();
     super.dispose();
   }
@@ -298,10 +482,11 @@ class _EvaluationPageState extends ConsumerState<EvaluationPage> {
         );
       case _Phase.error:
         return _Centered(child: Text('Error: ${_error ?? ''}'));
-      case _Phase.ready:
+      case _Phase.arming:
       case _Phase.countdown:
       case _Phase.capturing:
       case _Phase.computing:
+      case _Phase.results:
         return _buildCamera();
     }
   }
@@ -312,14 +497,16 @@ class _EvaluationPageState extends ConsumerState<EvaluationPage> {
       return const _Centered(child: CircularProgressIndicator());
     }
     final isFront = _camera?.lensDirection == CameraLensDirection.front;
-    final frame = _frame;
 
     return Stack(
       fit: StackFit.expand,
       children: [
         CameraPreview(controller),
-        if (frame != null)
-          CustomPaint(painter: PosePainter(frame: frame, isFront: isFront)),
+        RepaintBoundary(
+          child: CustomPaint(
+            painter: PosePainter(frames: _frames, isFront: isFront),
+          ),
+        ),
         if (_phase == _Phase.capturing)
           Align(
             alignment: Alignment.topCenter,
@@ -328,13 +515,27 @@ class _EvaluationPageState extends ConsumerState<EvaluationPage> {
               child: LinearProgressIndicator(value: _progress),
             ),
           ),
-        if (_phase == _Phase.countdown)
-          Container(
-            color: Colors.black38,
-            alignment: Alignment.center,
-            child: Text('$_countdown',
-                style: const TextStyle(
-                    color: Colors.white, fontSize: 120, fontWeight: FontWeight.bold)),
+        if (_phase == _Phase.results)
+          const Align(
+            alignment: Alignment.topCenter,
+            child: SafeArea(
+              child: Padding(
+                padding: EdgeInsets.all(12),
+                child: _RetryHintChip(),
+              ),
+            ),
+          ),
+        if (_phase == _Phase.arming)
+          ArmingOverlay(
+            status: _arming,
+            stillnessEnabled: _gesture.stillnessEnabled,
+            onStartNow: _startCountdown,
+          ),
+        if (_phase == _Phase.countdown || _showGo)
+          _CountdownOverlay(
+            label: _showGo ? '¡YA!' : '$_countdown',
+            isGo: _showGo,
+            pulse: _pulse,
           ),
         if (_phase == _Phase.computing)
           Container(
@@ -346,19 +547,136 @@ class _EvaluationPageState extends ConsumerState<EvaluationPage> {
               Text('Evaluando…', style: TextStyle(color: Colors.white)),
             ]),
           ),
-        if (_phase == _Phase.ready)
-          Align(
-            alignment: Alignment.bottomCenter,
-            child: Padding(
-              padding: const EdgeInsets.all(24),
-              child: FilledButton.icon(
-                onPressed: _startCountdown,
-                icon: const Icon(Icons.play_arrow),
-                label: const Text('Iniciar evaluación'),
-              ),
+      ],
+    );
+  }
+}
+
+/// Conteo a pantalla completa: el numero ocupa todo el ancho disponible y
+/// entra con un pulso para que se vea desde lejos mientras se baila (RF-08).
+class _CountdownOverlay extends StatelessWidget {
+  const _CountdownOverlay({
+    required this.label,
+    required this.isGo,
+    required this.pulse,
+  });
+
+  final String label;
+  final bool isGo;
+  final AnimationController pulse;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = isGo ? const Color(0xFF69F0AE) : Colors.white;
+    return Positioned.fill(
+      child: IgnorePointer(
+        child: DecoratedBox(
+          decoration: const BoxDecoration(
+            gradient: RadialGradient(
+              radius: 0.9,
+              colors: [Color(0xCC000000), Color(0xF2000000)],
             ),
           ),
-      ],
+          child: SafeArea(
+            child: AnimatedBuilder(
+              animation: pulse,
+              builder: (context, _) {
+                final t = pulse.value.clamp(0.0, 1.0);
+                // Entrada con rebote; el numero termina a tamano completo.
+                final scale = 0.55 + 0.45 * Curves.easeOutBack.transform(t);
+                final opacity = t < 0.12 ? t / 0.12 : 1.0;
+                return Opacity(
+                  opacity: opacity.clamp(0.0, 1.0),
+                  child: Column(
+                    children: [
+                      const Spacer(),
+                      Expanded(
+                        flex: 6,
+                        child: Center(
+                          child: Transform.scale(
+                            scale: scale,
+                            child: FractionallySizedBox(
+                              widthFactor: 0.92,
+                              child: FittedBox(
+                                fit: BoxFit.contain,
+                                child: Text(
+                                  label,
+                                  textAlign: TextAlign.center,
+                                  style: TextStyle(
+                                    color: color,
+                                    fontSize: 320,
+                                    height: 1,
+                                    fontWeight: FontWeight.w900,
+                                    letterSpacing: -8,
+                                    shadows: [
+                                      Shadow(
+                                        color: color.withValues(alpha: 0.6),
+                                        blurRadius: 48,
+                                      ),
+                                      const Shadow(
+                                        color: Colors.black87,
+                                        blurRadius: 12,
+                                        offset: Offset(0, 4),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 32),
+                        child: Text(
+                          isGo ? 'Baila' : 'Prepárate',
+                          style: TextStyle(
+                            color: Colors.white.withValues(alpha: 0.85),
+                            fontSize: 28,
+                            fontWeight: FontWeight.w600,
+                            letterSpacing: 2,
+                          ),
+                        ),
+                      ),
+                      const Spacer(),
+                    ],
+                  ),
+                );
+              },
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Recordatorio del gesto de reintento en la franja de cámara que deja libre
+/// el modal de resultados.
+class _RetryHintChip extends StatelessWidget {
+  const _RetryHintChip();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: BoxDecoration(
+        color: Colors.black.withValues(alpha: 0.65),
+        borderRadius: BorderRadius.circular(24),
+      ),
+      child: const Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.accessibility_new, color: Color(0xFF69F0AE), size: 20),
+          SizedBox(width: 8),
+          Flexible(
+            child: Text(
+              'Manos en la cintura para reintentar',
+              style: TextStyle(color: Colors.white, fontSize: 13),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/material.dart';
 
 import '../../domain/entities/pose_frame.dart';
@@ -6,14 +7,20 @@ import '../../domain/pose_landmarks.dart';
 /// Dibuja el esqueleto sobre la preview (RF-09). MediaPipe devuelve coords
 /// normalizadas 0..1 sobre la imagen ya vertical, así que el mapeo es directo;
 /// para cámara frontal se espeja en X.
+///
+/// Se repinta desde un [ValueListenable] en vez de por `setState`: así cada
+/// fotograma solo vuelve a pintar este canvas y NO reconstruye la preview de
+/// cámara ni el resto de la página (RNF-04).
 class PosePainter extends CustomPainter {
-  PosePainter({required this.frame, required this.isFront});
+  PosePainter({required this.frames, required this.isFront})
+      : super(repaint: frames);
 
-  final PoseFrame frame;
+  final ValueListenable<PoseFrame> frames;
   final bool isFront;
 
   @override
   void paint(Canvas canvas, Size size) {
+    final frame = frames.value;
     if (!frame.hasBody) return;
 
     final pointPaint = Paint()
@@ -54,5 +61,5 @@ class PosePainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant PosePainter old) =>
-      old.frame != frame || old.isFront != isFront;
+      old.frames != frames || old.isFront != isFront;
 }

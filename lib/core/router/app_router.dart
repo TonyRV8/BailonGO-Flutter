@@ -19,6 +19,11 @@ import 'splash_page.dart';
 final _rootKey = GlobalKey<NavigatorState>();
 final _shellKey = GlobalKey<NavigatorState>();
 
+/// Permite a una página saber cuándo vuelve a quedar visible tras cerrarse la
+/// que tenía encima. Lo usa el video guía para reanudarse al volver de la
+/// evaluación (RF-07).
+final routeObserver = RouteObserver<ModalRoute<void>>();
+
 /// Router de la app con guardas basadas en el estado de sesión.
 final appRouterProvider = Provider<GoRouter>((ref) {
   // Notifica al router cuando cambia el estado de auth, sin recrear el router.
@@ -32,6 +37,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
 
   return GoRouter(
     navigatorKey: _rootKey,
+    observers: [routeObserver],
     initialLocation: AppRoutes.splash,
     refreshListenable: refresh,
     redirect: (context, state) {

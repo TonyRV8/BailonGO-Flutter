@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:video_player/video_player.dart';
 
+import '../../../../core/router/app_router.dart';
 import '../../../../core/router/app_routes.dart';
 import '../providers/catalog_providers.dart';
 
@@ -100,7 +101,8 @@ class _VideoPanel extends StatefulWidget {
   State<_VideoPanel> createState() => _VideoPanelState();
 }
 
-class _VideoPanelState extends State<_VideoPanel> {
+class _VideoPanelState extends State<_VideoPanel>
+    with WidgetsBindingObserver, RouteAware {
   VideoPlayerController? _controller;
   bool _failed = false;
 
@@ -110,7 +112,42 @@ class _VideoPanelState extends State<_VideoPanel> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     if (_hasVideo) _initVideo();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final route = ModalRoute.of<void>(context);
+    if (route != null) routeObserver.subscribe(this, route);
+  }
+
+  /// La ficha vuelve a ser visible (se cerró la evaluación): el bucle debe
+  /// seguir corriendo sin que el usuario tenga que hacer nada.
+  @override
+  void didPopNext() => _resume();
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) _resume();
+  }
+
+  /// Reanuda el bucle si quedó pausado. El reproductor de Android pausa al
+  /// perder el foco de audio o al pasar a segundo plano, y no se reanuda solo.
+  Future<void> _resume() async {
+    final controller = _controller;
+    if (controller == null ||
+        !controller.value.isInitialized ||
+        controller.value.isPlaying) {
+      return;
+    }
+    try {
+      await controller.play();
+      if (mounted) setState(() {});
+    } catch (_) {
+      // Si el reproductor ya no es válido, se deja como está.
+    }
   }
 
   Future<void> _initVideo() async {
@@ -132,6 +169,8 @@ class _VideoPanelState extends State<_VideoPanel> {
 
   @override
   void dispose() {
+    routeObserver.unsubscribe(this);
+    WidgetsBinding.instance.removeObserver(this);
     _controller?.dispose();
     super.dispose();
   }

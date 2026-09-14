@@ -62,6 +62,21 @@ class SettingsPage extends ConsumerWidget {
           onChanged: (v) =>
               controller.save(settings.copyWith(mirrorCapture: v)),
         ),
+        // Arranque automático por quietud (RF-08.3). Desactivable para probar
+        // solo el gesto de brazos arriba.
+        SwitchListTile(
+          contentPadding: EdgeInsets.zero,
+          secondary: const Icon(Icons.self_improvement_outlined),
+          title: const Text('Iniciar al quedarme quieto'),
+          subtitle: const Text(
+              'La cuenta regresiva arranca tras '
+              '${AppConstants.stillnessSeconds} s sin moverte, ya encuadrado. '
+              'Si lo desactivas, solo inicia levantando los brazos o con el '
+              'botón.'),
+          value: settings.autoStartOnStill,
+          onChanged: (v) =>
+              controller.save(settings.copyWith(autoStartOnStill: v)),
+        ),
         // Herramientas de desarrollo: solo en builds debug.
         if (kDebugMode) ...[
           const SizedBox(height: 32),

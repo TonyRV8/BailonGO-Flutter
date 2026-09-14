@@ -14,11 +14,15 @@ class ResultsSheet extends StatelessWidget {
     required this.result,
     required this.feedback,
     required this.hasNext,
+    this.canGestureRetry = false,
   });
 
   final DtwResult result;
   final EvaluationFeedback feedback;
   final bool hasNext;
+
+  /// Si la cámara sigue viva por debajo y acepta el gesto de reintento.
+  final bool canGestureRetry;
 
   @override
   Widget build(BuildContext context) {
@@ -26,8 +30,8 @@ class ResultsSheet extends StatelessWidget {
     return SafeArea(
       child: DraggableScrollableSheet(
         expand: false,
-        initialChildSize: 0.85,
-        minChildSize: 0.5,
+        initialChildSize: 0.8,
+        minChildSize: 0.4,
         maxChildSize: 0.95,
         builder: (context, scrollController) => Column(
           children: [
@@ -91,6 +95,27 @@ class ResultsSheet extends StatelessWidget {
                 ],
               ),
             ),
+            // Atajo sin tocar el teléfono: la cámara sigue viva por debajo.
+            if (canGestureRetry)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(24, 4, 24, 0),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.accessibility_new,
+                        size: 16, color: theme.colorScheme.primary),
+                    const SizedBox(width: 6),
+                    Flexible(
+                      child: Text(
+                        'Ponte las manos en la cintura para reintentar sin '
+                        'volver al teléfono.',
+                        style: theme.textTheme.bodySmall,
+                        textAlign: TextAlign.center,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             Padding(
               padding: const EdgeInsets.fromLTRB(24, 8, 24, 16),
               child: Row(

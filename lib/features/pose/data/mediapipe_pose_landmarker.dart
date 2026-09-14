@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:flutter/services.dart';
 
 import '../domain/entities/pose_frame.dart';
@@ -27,7 +29,9 @@ class MediaPipePoseLandmarker implements PoseLandmarker {
     required int height,
     required int rotationDegrees,
   }) async {
-    final raw = await _channel.invokeMethod<List<dynamic>>('detect', {
+    // El nativo devuelve un DoubleArray, que el codec estándar entrega como
+    // Float64List: sin envolver 132 Double por fotograma.
+    final raw = await _channel.invokeMethod<Float64List>('detect', {
       'bytes': nv21,
       'width': width,
       'height': height,
@@ -35,16 +39,17 @@ class MediaPipePoseLandmarker implements PoseLandmarker {
     });
     if (raw == null || raw.isEmpty) return PoseFrame.empty;
 
-    final landmarks = <PoseLandmark>[];
-    for (var i = 0; i + 3 < raw.length; i += 4) {
-      landmarks.add(PoseLandmark(
-        type: i ~/ 4,
-        x: (raw[i] as num).toDouble(),
-        y: (raw[i + 1] as num).toDouble(),
-        z: (raw[i + 2] as num).toDouble(),
-        confidence: (raw[i + 3] as num).toDouble(),
-      ));
-    }
+    final landmarks = List<PoseLandmark>.generate(
+      raw.length ~/ 4,
+      (i) => PoseLandmark(
+        type: i,
+        x: raw[i * 4],
+        y: raw[i * 4 + 1],
+        z: raw[i * 4 + 2],
+        confidence: raw[i * 4 + 3],
+      ),
+      growable: false,
+    );
     return PoseFrame(landmarks: landmarks);
   }
 

@@ -63,9 +63,12 @@ service-account*.json
 /notas*.txt
 /docs/
 *.docx
+/storage.rules
+*.txt
 /ESCOM_TT1*.pdf
 /TT1_*.pdf
 /Evidencias_*.pdf
+/BailonGO_TT1_DOCUMENTACIÓN.pdf
 ~$*
 
 # OS

@@ -16,6 +16,10 @@ class AppConstants {
   static const double precisionWeightRhythm = 0.4; // RNF-06
   static const int countdownSeconds = 3; // RF-08
 
+  /// Segundos quieto y encuadrado para que la evaluacion arranque sola
+  /// (RF-08.3, desactivable en Configuracion).
+  static const int stillnessSeconds = 2;
+
   /// Umbral de "Paso Aprendido" (RN-02): mejor precisión ≥ esto. Pendiente de
   /// calibrar (plan.txt §8); configurable a futuro.
   static const double learnedThreshold = 80; // %

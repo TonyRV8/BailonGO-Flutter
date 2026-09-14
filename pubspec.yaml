@@ -35,6 +35,9 @@ dependencies:
   # Foto de perfil (RF-02)
   image_picker: ^1.1.2
 
+  # Sonido del conteo previo a la captura (RF-08)
+  audioplayers: ^6.1.0
+
   # Fases posteriores (se activan al llegar a su fase):
   # hive: ^2.2.3
   # hive_flutter: ^1.1.0
@@ -50,3 +53,4 @@ flutter:
   assets:
     - assets/videos/
     - assets/fixtures/ # ref/good/bad.mov para validar el motor (dev)
+    - assets/sounds/
