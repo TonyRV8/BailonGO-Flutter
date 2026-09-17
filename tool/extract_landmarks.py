@@ -65,6 +65,8 @@ def extract(path, landmarker):
     if not cap.isOpened():
         raise RuntimeError("no se pudo abrir " + path)
     fps = cap.get(cv2.CAP_PROP_FPS)
+    width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+    height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
     n_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
     targets = sample_indices(n_frames, fps)
 
@@ -96,6 +98,10 @@ def extract(path, landmarker):
         frames.append(flat)
     cap.release()
     return {
+        # Geometría de la imagen que vio MediaPipe: las coordenadas vienen
+        # normalizadas por ancho y alto, y la app corrige el aspecto con ella.
+        "width": width,
+        "height": height,
         "fps": fps,
         "sourceFrames": n_frames,
         "sampled": len(targets),

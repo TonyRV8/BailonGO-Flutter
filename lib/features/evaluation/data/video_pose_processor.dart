@@ -6,7 +6,7 @@ import '../../pose/domain/entities/pose_landmark.dart';
 import '../engine/feature_extractor.dart';
 
 /// Procesa un video (asset o archivo) con MediaPipe en modo VIDEO vía el
-/// platform channel y devuelve la secuencia de vectores de 15 features (una por
+/// platform channel y devuelve la secuencia de vectores de features (una por
 /// fotograma con cuerpo válido). Porta la idea de `VideoProcessor.kt`.
 class VideoPoseProcessor {
   static const MethodChannel _channel = MethodChannel('bailongo/pose');
@@ -19,8 +19,17 @@ class VideoPoseProcessor {
 
   /// Extrae features de un archivo en disco.
   Future<List<List<double>>> processFile(String path) async {
-    final raw =
-        await _channel.invokeMethod<List<dynamic>>('processVideo', {'path': path});
+    final res = await _channel.invokeMethod<Object?>('processVideo', {'path': path});
+    // El nativo devuelve {aspect, frames}; versiones anteriores, solo frames.
+    final List<dynamic>? raw;
+    var aspect = 1.0;
+    if (res is Map) {
+      raw = res['frames'] as List<dynamic>?;
+      final a = (res['aspect'] as num?)?.toDouble() ?? 0;
+      if (a > 0) aspect = a;
+    } else {
+      raw = res as List<dynamic>?;
+    }
     if (raw == null) return const [];
 
     final feats = <List<double>>[];
@@ -36,7 +45,7 @@ class VideoPoseProcessor {
           confidence: flat[i + 3],
         ));
       }
-      final v = FeatureExtractor.extractFeatures(landmarks);
+      final v = FeatureExtractor.extractFeatures(landmarks, aspectRatio: aspect);
       if (v != null) feats.add(v);
     }
     return feats;

@@ -28,8 +28,11 @@
 //   tren inferior (0-14) ...... 0.3 a 3.0 según el paso
 //   cadera (22-25) ............ 1.0 a 2.0 — es tren inferior, pesa alto
 //   hombros (17) .............. 0.5 base; 1.5 en guapeo, 0.8 en cuban break
-//   brazos y manos (15,16,18-21) 0.25 — cuentan, pero no mandan: la posición
-//                                de brazos varía entre tomas sin ser un error
+//   brazos y manos (15,16,18-21) 0.05 — casi simbólico. Medido (2026-09-17,
+//                                `bench.dart --groups`): el error de brazos de
+//                                un alumno que baila BIEN con su propio braceo
+//                                es mayor que el de la toma de 5/10. Con 0.25
+//                                hundían la alineación de guapeo y suzy q.
 //
 // CADERA: ya se mide (features 22-25), derivadas de los DOS landmarks de
 // cadera (23 izquierda y 24 derecha). Ver `FeatureExtractor._hipFeatures`.
@@ -60,9 +63,9 @@ const List<double> wBasicoAdelanteAtras = [
   0.5, 0.5, // 9,10  X rodilla
   1.0, 1.0, // 11,12 dirección del pie
   1.0, 1.0, // 13,14 pitch del pie
-  0.25, 0.25, // 15,16 brazos
+  0.05, 0.05, // 15,16 brazos
   0.5, //      17    hombros
-  0.25, 0.25, 0.25, 0.25, // 18–21 manos
+  0.05, 0.05, 0.05, 0.05, // 18–21 manos
   1.0, 1.5, 1.0, 1.0, // 22-25 cadera: acompaña, no es la firma
 ];
 
@@ -77,9 +80,9 @@ const List<double> wBasicoGuapeo = [
   0.8, 0.8, // 9,10  las rodillas sí acompañan la cadera
   0.8, 0.8, // 11,12
   0.8, 0.8, // 13,14
-  0.25, 0.25, // 15,16 brazos
+  0.05, 0.05, // 15,16 brazos
   1.5, //      17    inclinación de hombros: EL acento del guapeo
-  0.25, 0.25, 0.25, 0.25, // 18–21 manos
+  0.05, 0.05, 0.05, 0.05, // 18–21 manos
   1.5, 2.0, 1.0, 1.5, // 22-25 cadera: EL acento del guapeo
 ];
 
@@ -94,9 +97,9 @@ const List<double> wCucaracha = [
   1.5, 1.5, // 9,10  X de rodilla
   0.8, 0.8, // 11,12
   1.0, 1.0, // 13,14 pitch: la presión al piso
-  0.25, 0.25, // 15,16 brazos
+  0.05, 0.05, // 15,16 brazos
   0.5, //      17    hombros
-  0.25, 0.25, 0.25, 0.25, // 18–21 manos
+  0.05, 0.05, 0.05, 0.05, // 18–21 manos
   1.5, 2.0, 1.0, 1.0, // 22-25 cadera: el peso carga a un lado
 ];
 
@@ -110,9 +113,9 @@ const List<double> wSuzyQ = [
   1.2, 1.2, // 9,10  giro de rodillas coordinado
   2.5, 2.5, // 11,12 dirección del pie: LA firma del paso
   2.5, 2.5, // 13,14 pitch talón/punta: LA firma del paso
-  0.25, 0.25, // 15,16 brazos
+  0.05, 0.05, // 15,16 brazos
   0.5, //      17    hombros
-  0.25, 0.25, 0.25, 0.25, // 18–21 manos
+  0.05, 0.05, 0.05, 0.05, // 18–21 manos
   1.0, 1.2, 1.0, 1.0, // 22-25 cadera: acompaña el cruce
 ];
 
@@ -128,9 +131,9 @@ const List<double> wRightSpotTurn = [
   0.3, 0.3, // 9,10  X rodilla: ruido de rotación
   2.0, 2.0, // 11,12 dirección del pie: sigue el giro
   1.5, 1.5, // 13,14 pitch: pivote
-  0.25, 0.25, // 15,16 brazos
+  0.05, 0.05, // 15,16 brazos
   0.5, //      17    hombros
-  0.25, 0.25, 0.25, 0.25, // 18–21 manos
+  0.05, 0.05, 0.05, 0.05, // 18–21 manos
   1.0, 1.0, 1.0, 2.0, // 22-25 cadera: la rotación es la señal
 ];
 
@@ -144,9 +147,9 @@ const List<double> wCumbiaStep = [
   1.0, 1.0, // 9,10
   1.0, 1.0, // 11,12
   1.5, 1.5, // 13,14 pitch: la marca de tiempo del pie de apoyo
-  0.25, 0.25, // 15,16 brazos
+  0.05, 0.05, // 15,16 brazos
   0.5, //      17    hombros
-  0.25, 0.25, 0.25, 0.25, // 18–21 manos
+  0.05, 0.05, 0.05, 0.05, // 18–21 manos
   1.5, 1.8, 1.0, 1.0, // 22-25 cadera: acompaña el arrastre
 ];
 
@@ -160,9 +163,9 @@ const List<double> wCubanBreak = [
   1.2, 1.2, // 9,10  juego de cadera vía rodillas
   0.8, 0.8, // 11,12
   1.0, 1.0, // 13,14
-  0.25, 0.25, // 15,16 brazos
+  0.05, 0.05, // 15,16 brazos
   0.8, //      17    el hombro acompaña el acento sincopado
-  0.25, 0.25, 0.25, 0.25, // 18–21 manos
+  0.05, 0.05, 0.05, 0.05, // 18–21 manos
   1.5, 2.0, 1.0, 1.5, // 22-25 cadera: el juego de cadera del quiebre
 ];
 
@@ -177,9 +180,9 @@ const List<double> wGiroPuntaTalon = [
   0.3, 0.3, // 9,10  ruido de rotación
   2.5, 2.5, // 11,12 dirección del pie: LA firma
   2.5, 2.5, // 13,14 pitch punta/talón: LA firma
-  0.25, 0.25, // 15,16 brazos
+  0.05, 0.05, // 15,16 brazos
   0.5, //      17    hombros
-  0.25, 0.25, 0.25, 0.25, // 18–21 manos
+  0.05, 0.05, 0.05, 0.05, // 18–21 manos
   1.0, 1.0, 1.0, 2.0, // 22-25 cadera: la rotación es la señal
 ];
 
@@ -194,9 +197,9 @@ const List<double> wKickFlick = [
   0.8, 0.8, // 9,10
   1.0, 1.0, // 11,12
   1.5, 1.5, // 13,14 pitch: el flick
-  0.25, 0.25, // 15,16 brazos
+  0.05, 0.05, // 15,16 brazos
   0.5, //      17    hombros
-  0.25, 0.25, 0.25, 0.25, // 18–21 manos
+  0.05, 0.05, 0.05, 0.05, // 18–21 manos
   1.0, 1.0, 1.2, 1.0, // 22-25 cadera: estabiliza en la patada
 ];
 

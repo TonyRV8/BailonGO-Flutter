@@ -46,6 +46,27 @@ class AttemptRepository {
     }));
   }
 
+  /// TEMPORAL (dev): borra los intentos del usuario, de un paso ([pasoId]) o
+  /// de todos. Como la mejor marca se deriva de HISTORY, eso la deja en 0.
+  /// Devuelve cuántos intentos se borraron.
+  ///
+  /// Local-first igual que [save]: el borrado se aplica a la cache al instante
+  /// (catálogo y perfil se refrescan sin red) y se sincroniza al reconectar.
+  Future<int> deleteAttempts({required String uid, String? pasoId}) async {
+    Query<Map<String, dynamic>> query = _firestore
+        .collection(AppConstants.historyCollection)
+        .where('uid', isEqualTo: uid);
+    if (pasoId != null) query = query.where('pasoId', isEqualTo: pasoId);
+    final snap = await query.get();
+    if (snap.docs.isEmpty) return 0;
+    final batch = _firestore.batch();
+    for (final doc in snap.docs) {
+      batch.delete(doc.reference);
+    }
+    unawaitedWrite(batch.commit());
+    return snap.docs.length;
+  }
+
   /// Dispara la escritura sin bloquear el flujo; los errores de sync quedan
   /// registrados por el SDK y no afectan la UX del intento.
   static void unawaitedWrite(Future<void> future) {

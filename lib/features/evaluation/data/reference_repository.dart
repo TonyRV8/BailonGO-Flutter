@@ -1,21 +1,33 @@
 import '../../catalog/domain/entities/dance_step.dart';
+import 'reference_asset_source.dart';
 import 'reference_remote_data_source.dart';
 import 'video_pose_processor.dart';
 
 /// Obtiene los frames de features de referencia de un paso. Orden de búsqueda:
 ///   1. Cache en memoria (sesión actual).
-///   2. Firestore REFERENCE_DATA (extraído una sola vez → carga instantánea).
-///   3. Extracción del video asset (fallback; lento, solo si nunca se subió).
+///   2. Asset empaquetado `assets/references/<pasoId>.json` (landmarks; las
+///      features se calculan con el extractor vigente).
+///   3. Firestore REFERENCE_DATA, solo si se generó con la versión actual del
+///      extractor (las anteriores no corrigen el aspecto ni traen la cadera).
+///   4. Extracción del video asset (fallback; lento, solo si nunca se subió).
 class ReferenceRepository {
-  ReferenceRepository(this._processor, this._remote);
+  ReferenceRepository(this._processor, this._remote, [ReferenceAssetSource? assets])
+      : _assets = assets ?? ReferenceAssetSource();
 
   final VideoPoseProcessor _processor;
   final ReferenceRemoteDataSource _remote;
+  final ReferenceAssetSource _assets;
   final Map<String, List<List<double>>> _cache = {};
 
   Future<List<List<double>>> framesFor(DanceStep step) async {
     final cached = _cache[step.id];
     if (cached != null) return cached;
+
+    final fromAsset = await _assets.load(step.id);
+    if (fromAsset != null && fromAsset.isNotEmpty) {
+      _cache[step.id] = fromAsset;
+      return fromAsset;
+    }
 
     final fromDb = await _remote.load(step.id);
     if (fromDb != null && fromDb.isNotEmpty) {

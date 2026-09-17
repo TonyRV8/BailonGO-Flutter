@@ -50,6 +50,32 @@ void main() {
       expect(f, isNull);
     });
 
+    test('corrección de aspecto: la misma pose en dos cámaras da lo mismo', () {
+      // Pose vista en una imagen 720x1280 (aspecto 16/9) y la MISMA pose en
+      // una 480x720 (aspecto 3/2), con las coordenadas normalizadas de cada una.
+      final pose = standingPose();
+      const wideAspect = 1280 / 720, liveAspect = 720 / 480;
+      final live = [
+        for (final p in pose)
+          PoseLandmark(
+            type: p.type,
+            x: p.x,
+            y: p.y * wideAspect / liveAspect,
+            z: 0,
+            confidence: p.confidence,
+          ),
+      ];
+      final a = FeatureExtractor.extractFeatures(pose, aspectRatio: wideAspect)!;
+      final b = FeatureExtractor.extractFeatures(live, aspectRatio: liveAspect)!;
+      for (var i = 0; i < a.length; i++) {
+        expect(b[i], closeTo(a[i], 1e-9), reason: 'componente $i');
+      }
+      // Sin corregir, la altura del tobillo (5) cambia con la cámara.
+      final raw = FeatureExtractor.extractFeatures(pose)!;
+      final rawLive = FeatureExtractor.extractFeatures(live)!;
+      expect((raw[5] - rawLive[5]).abs(), greaterThan(0.1));
+    });
+
     test('mirrorFeatures es involutivo: mirror(mirror(f)) == f', () {
       final f = FeatureExtractor.extractFeatures(standingPose())!;
       final mm = FeatureExtractor.mirrorFeatures(

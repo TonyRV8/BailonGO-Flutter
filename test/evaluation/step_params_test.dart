@@ -4,33 +4,35 @@ import 'package:bailongo/features/evaluation/engine/feature_extractor.dart';
 import 'package:bailongo/features/evaluation/engine/step_params.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-/// Congela la calibración por paso (§7-ter). No mide scores —eso lo hace
-/// `tool/calibrate.dart` con los videos, que no se versionan— sino que protege
-/// las invariantes que hacen que esos scores sigan siendo válidos.
+/// Congela la calibración (§7-quinquies). No mide scores —eso lo hace
+/// `tool/bench.dart` con las tomas, que no se versionan— sino que protege las
+/// invariantes que hacen que esos scores sigan siendo válidos.
 void main() {
-  group('parámetros calibrados por paso', () {
+  group('parámetros por paso', () {
     test('los 9 pasos reales tienen calibración propia', () {
       for (final id in kRealStepIds) {
-        expect(calibratedStepIds, contains(id),
-            reason: '$id se quedó sin calibrar: volvería a los defaults '
-                'globales, que dejan 4 de 9 pasos fuera de banda');
+        expect(calibratedStepIds, contains(id), reason: id);
       }
       expect(calibratedStepIds.length, kRealStepIds.length);
     });
 
     test('un paso sin calibrar cae a los defaults', () {
       expect(paramsFor('paso_prueba').alignMax, DtwParams.defaults.alignMax);
-      expect(paramsFor('no_existe').alignNoiseFloor,
-          DtwParams.defaults.alignNoiseFloor);
     });
 
-    test('cada paso tiene una curva de puntuación válida', () {
+    test('solo la curva de alineación cambia por paso, y dentro de límites',
+        () {
+      const d = DtwParams.defaults;
       for (final id in kRealStepIds) {
         final p = paramsFor(id);
-        // Sin esto `_costToAlignScore` divide por cero o invierte la curva.
-        expect(p.alignMax, greaterThan(p.alignNoiseFloor), reason: id);
-        expect(p.alignNoiseFloor, greaterThanOrEqualTo(0), reason: id);
-        expect(p.alignCurvePower, greaterThan(0), reason: id);
+        // Acotado para que ningún paso quede tan laxo que estar quieto
+        // apruebe (lo que le pasó a cucaracha en §7-ter).
+        expect(p.alignMax, inInclusiveRange(0.9, 2.2), reason: id);
+        expect(p.alignNoiseFloor, inInclusiveRange(0.1, 0.7), reason: id);
+        expect(p.alignMax, greaterThanOrEqualTo(p.alignNoiseFloor + 0.25), reason: id);
+        expect(p.alignCurvePower, d.alignCurvePower, reason: id);
+        expect(p.coverageZeroRatio, d.coverageZeroRatio, reason: id);
+        expect(p.rhythmCorrFull, d.rhythmCorrFull, reason: id);
       }
     });
 
@@ -41,8 +43,9 @@ void main() {
       }
     });
 
-    test('los rangos por feature cubren todas las features', () {
+    test('rangos y temblor cubren todas las features', () {
       expect(DtwParams.defaultFeatureRanges.length, FeatureExtractor.featureCount);
+      expect(DtwParams.defaultFeatureNoise.length, FeatureExtractor.featureCount);
       for (final r in DtwParams.defaultFeatureRanges) {
         expect(r, greaterThan(0));
       }

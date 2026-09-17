@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -5,6 +6,7 @@ import 'package:video_player/video_player.dart';
 
 import '../../../../core/router/app_router.dart';
 import '../../../../core/router/app_routes.dart';
+import '../../../evaluation/presentation/widgets/reset_progress.dart';
 import '../providers/catalog_providers.dart';
 
 /// Ficha de un paso (RF-06): nombre, descripción, mejor precisión histórica y
@@ -80,10 +82,37 @@ class StepDetailPage extends ConsumerWidget {
           const SizedBox(height: 8),
           // Evaluación end-to-end (RF-08+).
           FilledButton.icon(
-            onPressed: () => context.push('${AppRoutes.evaluate}/${step.id}'),
+            onPressed: () async {
+              // La evaluación devuelve el id del siguiente paso si el usuario
+              // pulsó "Siguiente": esta ficha se sustituye por la del
+              // siguiente, como si se hubiera abierto desde el catálogo.
+              final nextId =
+                  await context.push<String>('${AppRoutes.evaluate}/${step.id}');
+              if (nextId != null && context.mounted) {
+                context.pushReplacement('${AppRoutes.step}/$nextId');
+              }
+            },
             icon: const Icon(Icons.play_arrow),
             label: const Text('Iniciar evaluación'),
           ),
+          // TEMPORAL (dev): reinicia la mejor marca de ESTE paso a 0. Mismo
+          // botón que en Configuración para todos los pasos. Quitar en §8.
+          if (kDebugMode) ...[
+            const SizedBox(height: 8),
+            TextButton.icon(
+              onPressed: () => confirmAndResetProgress(
+                context,
+                ref,
+                pasoId: step.id,
+                stepName: step.nombre,
+              ),
+              style: TextButton.styleFrom(
+                foregroundColor: theme.colorScheme.error,
+              ),
+              icon: const Icon(Icons.restart_alt),
+              label: const Text('Reiniciar progreso de este paso (dev)'),
+            ),
+          ],
         ],
       ),
     );
@@ -106,6 +135,11 @@ class _VideoPanelState extends State<_VideoPanel>
   VideoPlayerController? _controller;
   bool _failed = false;
 
+  /// Otra pantalla (evaluación, cámara) está encima. El video guía lleva la
+  /// música del paso: si siguiera sonando debajo, se oiría doble junto a la
+  /// música de la evaluación.
+  bool _covered = false;
+
   bool get _hasVideo =>
       widget.mediaUrl != null && widget.mediaUrl!.isNotEmpty;
 
@@ -123,14 +157,28 @@ class _VideoPanelState extends State<_VideoPanel>
     if (route != null) routeObserver.subscribe(this, route);
   }
 
+  /// Se abre otra pantalla encima: el video se pausa (y con él su audio).
+  @override
+  void didPushNext() {
+    _covered = true;
+    final controller = _controller;
+    if (controller != null && controller.value.isInitialized) {
+      controller.pause();
+    }
+  }
+
   /// La ficha vuelve a ser visible (se cerró la evaluación): el bucle debe
   /// seguir corriendo sin que el usuario tenga que hacer nada.
   @override
-  void didPopNext() => _resume();
+  void didPopNext() {
+    _covered = false;
+    _resume();
+  }
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed) _resume();
+    // Volver del segundo plano con la evaluación abierta no debe reanudarlo.
+    if (state == AppLifecycleState.resumed && !_covered) _resume();
   }
 
   /// Reanuda el bucle si quedó pausado. El reproductor de Android pausa al
@@ -162,7 +210,8 @@ class _VideoPanelState extends State<_VideoPanel>
       // El video lleva la música incrustada: suena y se repite con cada
       // vuelta del bucle (setLooping ya está activo).
       await controller.setVolume(1);
-      await controller.play();
+      // Si mientras cargaba ya se abrió la evaluación, no arrancar debajo.
+      if (!_covered) await controller.play();
       if (mounted) setState(() {});
     } catch (_) {
       if (mounted) setState(() => _failed = true);

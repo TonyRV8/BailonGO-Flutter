@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 import '../../../core/config/app_constants.dart';
+import '../engine/feature_extractor.dart';
 
 /// Lee/escribe los frames de referencia en la colección REFERENCE_DATA
 /// (doc 5.3.3). Firestore no soporta arreglos anidados, así que las features se
@@ -15,13 +16,20 @@ class ReferenceRemoteDataSource {
   DocumentReference<Map<String, dynamic>> _doc(String pasoId) =>
       _firestore.collection(AppConstants.referenceDataCollection).doc(pasoId);
 
-  /// Carga los frames de referencia; `null` si el documento no existe.
+  /// Carga los frames de referencia; `null` si el documento no existe o se
+  /// generó con otra versión del extractor (features distintas a las que
+  /// produce hoy la captura en vivo: compararlas daría notas sin sentido).
   Future<List<List<double>>?> load(String pasoId) async {
     try {
       final snap = await _doc(pasoId).get();
       if (!snap.exists) return null;
       final data = snap.data()!;
       final featureSize = (data['featureSize'] as num?)?.toInt() ?? 0;
+      final version = (data['extractorVersion'] as num?)?.toInt() ?? 1;
+      if (version != FeatureExtractor.version ||
+          featureSize != FeatureExtractor.featureCount) {
+        return null;
+      }
       final flat = (data['flat'] as List?)
           ?.map((e) => (e as num).toDouble())
           .toList();
@@ -46,6 +54,7 @@ class ReferenceRemoteDataSource {
       'pasoId': pasoId,
       'frameCount': frames.length,
       'featureSize': featureSize,
+      'extractorVersion': FeatureExtractor.version,
       'fps': 30,
       'flat': flat,
     });

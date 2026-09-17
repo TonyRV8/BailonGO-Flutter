@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 
 import 'package:bailongo/features/evaluation/engine/dtw_comparator.dart';
+import 'package:bailongo/features/evaluation/engine/dtw_params.dart';
 import 'package:bailongo/features/evaluation/engine/feature_extractor.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -95,8 +96,10 @@ void main() {
 
     test('ejecución muy distinta -> score bajo', () {
       final ref = makeSeq(30);
-      // Offset grande en todos los componentes: aleja el costo del noise floor.
-      final bad = makeSeq(30, offset: 40);
+      // Movimiento en contrafase: cada feature sube cuando la del modelo baja.
+      // (Un offset constante ya no basta: es postura, y el motor v2 compara
+      // sobre todo el movimiento; ver cabecera de DtwComparator.)
+      final bad = makeSeq(30, phase: math.pi);
       final r = DtwComparator.compare(bad, ref);
       expect(r.alignmentScore, lessThan(40));
       expect(r.score, lessThan(60));
@@ -139,15 +142,20 @@ void main() {
     test('pesos: ignorar la feature que difiere sube la alineación', () {
       final ref = makeSeq(30);
       final user = makeSeq(30);
-      // El usuario difiere fuerte solo en la feature 0 (ángulo rodilla izq).
-      for (final fr in user) {
-        fr[0] += 60;
+      // El usuario difiere fuerte solo en la feature 0 (ángulo rodilla izq):
+      // la mueve a otro ritmo, no solo desplazada (un desplazamiento
+      // constante es postura, y el motor compara sobre todo movimiento).
+      for (var i = 0; i < user.length; i++) {
+        user[i][0] += 60 * math.sin(i * 1.7);
       }
-      final uniform = DtwComparator.compare(user, ref);
+      // Sin zona muerta: una sola feature de 15 no debe quedar absorbida.
+      final strict = DtwParams.defaults.copyWith(alignNoiseFloor: 0);
+      final uniform = DtwComparator.compare(user, ref, params: strict);
       final ignore0 = DtwComparator.compare(
         user,
         ref,
         weights: [0, ...List.filled(14, 1.0)],
+        params: strict,
       );
       expect(ignore0.alignmentScore, greaterThan(uniform.alignmentScore));
     });

@@ -1,5 +1,9 @@
 /// Banco de calibración en PC (implementar_pasos.txt §7).
 ///
+/// HISTÓRICO (§7-ter). Sustituido por `tool/bench.dart` (§7-quater): este
+/// banco solo mide ideal-vs-ideal y regular-vs-ideal, y su `--fit` genera los
+/// parámetros del motor anterior. No pegar su salida en step_params.dart.
+///
 /// Corre el motor REAL de producción (`FeatureExtractor` + `DtwComparator`,
 /// importados de lib/) sobre los landmarks que `tool/extract_landmarks.py`
 /// volcó a JSON. No reimplementa nada: lo que se mide aquí es exactamente lo
@@ -443,11 +447,21 @@ Future<void> main(List<String> args) async {
     // --uniform: ignora los vectores por paso y pondera todo el tren inferior
     // por igual. Sirve para aislar si los pesos elegidos a mano ayudan o
     // estorban, ya que nunca fueron validados contra datos.
-    final w = uniform
+    // --stale: simula lo que hay HOY en Firestore, sembrado antes de añadir
+    // tren superior y cadera: vector de 22 con brazos/hombros a 0. El
+    // comparador rellena las 4 de cadera que faltan con 1.0.
+    final stale = args.contains('--stale');
+    final base = kStepWeights[id]!;
+    final w = stale
+        ? [
+            ...base.sublist(0, 15),
+            0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, // 15-21 como se sembraron
+          ]
+        : uniform
         ? const <double>[1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
             0, 0, 0, 0, 0, 0, 0]
         : kStepWeights[id]!;
-    data.add(StepFrames(id, w, ideal, regular));
+    data.add(StepFrames(id, w.cast<double>(), ideal, regular));
   }
 
   if (missing.isNotEmpty) {

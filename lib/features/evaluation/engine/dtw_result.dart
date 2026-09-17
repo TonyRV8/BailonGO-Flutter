@@ -6,6 +6,10 @@ class DtwResult {
     required this.rhythmScore,
     required this.alignmentScore,
     required this.normalizedCost,
+    this.relativeCost = 0,
+    this.coverage = 1,
+    this.coverageFactor = 1,
+    this.mirrorFactor = 1,
     required this.segmentRhythm,
     required this.segmentAlignment,
     required this.segmentScore,
@@ -22,6 +26,18 @@ class DtwResult {
   final int rhythmScore;
   final int alignmentScore;
   final double normalizedCost;
+
+  /// Coste de alineación dividido por el de quedarse quieto frente a la misma
+  /// referencia: 0 = idéntico, 1 = como no moverse.
+  final double relativeCost;
+
+  /// Fracción de la amplitud del modelo que el usuario cubrió (0..1).
+  final double coverage;
+
+  /// Multiplicadores aplicados por falta de movimiento y por lateralidad
+  /// invertida (1 = sin castigo). Diagnóstico para el banco y el feedback.
+  final double coverageFactor;
+  final double mirrorFactor;
   final List<int> segmentRhythm;
   final List<int> segmentAlignment;
 

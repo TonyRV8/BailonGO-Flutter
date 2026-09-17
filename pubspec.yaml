@@ -54,3 +54,4 @@ flutter:
     - assets/videos/
     - assets/fixtures/ # ref/good/bad.mov para validar el motor (dev)
     - assets/sounds/
+    - assets/references/ # landmarks de las tomas ideales (tool/build_references.py)

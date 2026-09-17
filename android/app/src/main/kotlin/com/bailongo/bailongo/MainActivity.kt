@@ -208,7 +208,7 @@ class MainActivity : FlutterActivity() {
      * VideoProcessor.kt del prototipo). Devuelve, por fotograma con cuerpo, un
      * arreglo plano [x, y, z, visibility] x 33.
      */
-    private fun processVideo(path: String): List<List<Double>> {
+    private fun processVideo(path: String): Map<String, Any> {
         val base = BaseOptions.builder()
             .setModelAssetPath("pose_landmarker_lite.task")
             .setDelegate(Delegate.CPU)
@@ -224,6 +224,9 @@ class MainActivity : FlutterActivity() {
         val lm = PoseLandmarker.createFromOptions(this, options)
         val retriever = MediaMetadataRetriever()
         val frames = ArrayList<List<Double>>()
+        // Alto/ancho de los fotogramas que ve MediaPipe: las coordenadas vienen
+        // normalizadas por cada eje y Dart corrige el aspecto con esto.
+        var aspect = 0.0
         try {
             retriever.setDataSource(path)
             val durationMs = retriever
@@ -238,6 +241,9 @@ class MainActivity : FlutterActivity() {
                         MediaMetadataRetriever.OPTION_CLOSEST,
                     )?.copy(Bitmap.Config.ARGB_8888, false)
                     if (bmp != null) {
+                        if (aspect == 0.0 && bmp.width > 0) {
+                            aspect = bmp.height.toDouble() / bmp.width
+                        }
                         val res = lm.detectForVideo(BitmapImageBuilder(bmp).build(), ts)
                         if (res.landmarks().isNotEmpty()) {
                             val frame = ArrayList<Double>(33 * 4)
@@ -260,7 +266,7 @@ class MainActivity : FlutterActivity() {
             retriever.release()
             lm.close()
         }
-        return frames
+        return mapOf("aspect" to aspect, "frames" to frames)
     }
 
     /// Frame del centro del video como JPEG, para usar de portada en el catálogo.

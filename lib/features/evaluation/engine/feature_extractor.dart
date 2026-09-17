@@ -17,6 +17,12 @@ class FeatureExtractor {
   /// 15 tren inferior + 7 tren superior + 4 de cadera.
   static const int featureCount = 26;
 
+  /// Versión del cálculo. Súbela si cambia cualquier feature: las referencias
+  /// guardadas en Firestore con otra versión se ignoran.
+  ///   1  22 y luego 26 features, coordenadas normalizadas sin corregir
+  ///   2  corrección de aspecto (y en unidades del ancho de la imagen)
+  static const int version = 2;
+
   // Tren inferior.
   static const int _leftHip = 23;
   static const int _rightHip = 24;
@@ -51,15 +57,33 @@ class FeatureExtractor {
   /// Vector de [featureCount] features. `null` si faltan landmarks o la
   /// visibilidad crítica (tren inferior) es insuficiente. El tren superior no
   /// invalida: si no es visible, sus features quedan en 0 (neutras).
+  ///
+  /// [aspectRatio] = alto / ancho de la imagen que vio MediaPipe. Las
+  /// coordenadas llegan normalizadas por ancho y por alto por separado, así que
+  /// sin corregir una misma pose da ángulos y alturas distintos en el video de
+  /// la profesora (720x1280, 16:9) y en la cámara del teléfono (480x720, 3:2):
+  /// las alturas de tobillo y cadera diferían ~18 % sin que nadie se moviera
+  /// distinto. Con la corrección, `y` queda en unidades del ancho.
   static List<double>? extractFeatures(
     List<PoseLandmark> landmarks, {
     bool isMirrored = false,
+    double aspectRatio = 1.0,
   }) {
     if (landmarks.length < 33) return null;
 
     final lm = List<PoseLandmark?>.filled(33, null);
     for (final p in landmarks) {
-      if (p.type >= 0 && p.type < 33) lm[p.type] = p;
+      if (p.type >= 0 && p.type < 33) {
+        lm[p.type] = aspectRatio == 1.0
+            ? p
+            : PoseLandmark(
+                type: p.type,
+                x: p.x,
+                y: p.y * aspectRatio,
+                z: p.z,
+                confidence: p.confidence,
+              );
+      }
     }
 
     for (final idx in _criticalIndices) {

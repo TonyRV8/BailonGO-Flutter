@@ -1,69 +1,48 @@
 import 'dtw_params.dart';
 
-/// Parámetros de evaluación AJUSTADOS POR PASO (implementar_pasos.txt §7-ter).
+/// Parámetros de evaluación AJUSTADOS POR PASO (implementar_pasos.txt
+/// §7-quinquies). Recalibración del 2026-09-17 tras pruebas en vivo en las que
+/// guapeo, suzy q y right spot turn daban alineación 0 bailando bien:
+///   dart run tool/bench.dart tool/landmarks.json --fit
 ///
-/// Calibración del 2026-09-13 con el banco de PC:
-///   `dart run tool/calibrate.dart tool/landmarks.json --fit`
+/// Todo el motor es global (`DtwParams.defaults`) salvo los dos extremos de
+/// la curva de alineación, que trabaja sobre el COSTE RELATIVO (coste /
+/// coste de quedarse quieto):
 ///
-/// Cada paso tiene su propio (alignNoiseFloor, alignMax) obtenido por bisección
-/// para que su toma "regular" —la que la experta puntúa 5/10— dé exactamente
-/// 50 %. El control ideal-vs-ideal da 100 % en los nueve.
+///   max    la toma de 5/10 de la profesora (limpia y en vivo) da ~50 %.
+///   floor  el menor suelo con el que un ALUMNO que baila bien —con su propio
+///          braceo, amplitud y fraseo, en cámara real— llega a ~85 %. Si no
+///          llega sin subir la toma de 5, el que más se acerca.
 ///
-/// POR QUÉ POR PASO Y NO GLOBAL: el coste normalizado de la toma regular varía
-/// 25x entre pasos (0.023 en el básico a 0.576 en kick_flick). Ninguna curva
-/// global puede mapear ese rango a una banda común: el mejor juego global
-/// encontrado dejaba 4 de 9 pasos fuera, con dos clavados en 40 por saturación.
+/// Límites: floor 0.1-0.7, max 0.9-2.2, max - floor ≥ 0.25, y quedarse quieto
+/// desde la mitad del intento ≤ ~55 %.
 ///
-/// LIMITACIÓN QUE HAY QUE DECLARAR EN LA MEMORIA: se ajustan 2 parámetros por
-/// paso contra 1 sola muestra etiquetada por paso. Eso fija la escala en dos
-/// puntos (0 % de error → 100 %, la toma regular → 50 %) pero NO valida la
-/// forma de la curva entre medias. Para eso harían falta más tomas por paso
-/// con notas distintas (p.ej. una de 7-8/10 y una de 2-3/10).
+/// Resultado en el banco (objetivo entre paréntesis):
+///   alumno bien 80-86 (85), salvo right_spot_turn 65 · toma de 5: 49-55 (50)
+///   profesora en cámara real 94-100 · quieto 0-1 (0) · quieto desde la mitad
+///   17-57 (30) · otro paso 9-44
 ///
-/// `alignCurvePower` se deja en el valor por defecto (2.0) a propósito: con una
-/// sola muestra por paso no hay información para ajustar también la curvatura.
-const Map<String, DtwParams> _fitted = {
-  'basico_adelante_atras': DtwParams(
-    alignNoiseFloor: 0.0149,
-    alignMax: 0.1991,
-  ),
-  'basico_guapeo': DtwParams(
-    alignNoiseFloor: 0.0131,
-    alignMax: 0.0909,
-  ),
-  'cucaracha': DtwParams(
-    alignNoiseFloor: 0.1067,
-    alignMax: 0.6500,
-  ),
-  'suzy_q': DtwParams(
-    alignNoiseFloor: 0.0177,
-    alignMax: 0.1026,
-  ),
-  'right_spot_turn': DtwParams(
-    alignNoiseFloor: 0.0296,
-    alignMax: 0.1695,
-  ),
-  'cumbia_step': DtwParams(
-    alignNoiseFloor: 0.0672,
-    alignMax: 0.3545,
-  ),
-  'cuban_break': DtwParams(
-    alignNoiseFloor: 0.0217,
-    alignMax: 0.1256,
-  ),
-  'giro_punta_talon': DtwParams(
-    alignNoiseFloor: 0.0322,
-    alignMax: 0.2346,
-  ),
-  'kick_flick': DtwParams(
-    alignNoiseFloor: 0.1630,
-    alignMax: 0.8602,
-  ),
+/// Cambiar cualquier parámetro invalida la comparabilidad de las mejores
+/// marcas ya guardadas en HISTORY.
+const Map<String, ({double floor, double max})> _fitted = {
+  'basico_adelante_atras': (floor: 0.700, max: 1.139),
+  'basico_guapeo': (floor: 0.600, max: 0.942),
+  'cucaracha': (floor: 0.300, max: 1.057),
+  'suzy_q': (floor: 0.450, max: 1.059),
+  'right_spot_turn': (floor: 0.500, max: 0.900),
+  'cumbia_step': (floor: 0.350, max: 0.900),
+  'cuban_break': (floor: 0.500, max: 0.902),
+  'giro_punta_talon': (floor: 0.600, max: 0.900),
+  'kick_flick': (floor: 0.200, max: 1.200),
 };
 
-/// Parametros del paso indicado; los defaults globales si no esta calibrado
+/// Parámetros del paso indicado; los defaults globales si no está calibrado
 /// (p.ej. los pasos de prueba temporales).
-DtwParams paramsFor(String pasoId) => _fitted[pasoId] ?? DtwParams.defaults;
+DtwParams paramsFor(String pasoId) {
+  final f = _fitted[pasoId];
+  if (f == null) return DtwParams.defaults;
+  return DtwParams.defaults.copyWith(alignNoiseFloor: f.floor, alignMax: f.max);
+}
 
-/// Ids con calibracion propia. Util para avisos en herramientas dev.
+/// Ids con calibración propia. Útil para avisos en herramientas dev.
 Iterable<String> get calibratedStepIds => _fitted.keys;

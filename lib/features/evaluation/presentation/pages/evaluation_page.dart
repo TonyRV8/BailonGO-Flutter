@@ -10,9 +10,9 @@ import 'package:go_router/go_router.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 import '../../../../core/config/app_constants.dart';
-import '../../../../core/router/app_routes.dart';
 import '../../../auth/presentation/providers/auth_providers.dart';
 import '../../../catalog/domain/entities/dance_step.dart';
+import '../../../catalog/domain/step_weights.dart';
 import '../../../catalog/presentation/providers/catalog_providers.dart';
 import '../../../pose/data/camera_input.dart';
 import '../../../pose/domain/entities/pose_frame.dart';
@@ -24,6 +24,7 @@ import '../../engine/dtw_comparator.dart';
 import '../../engine/step_params.dart';
 import '../../engine/dtw_result.dart';
 import '../../engine/feature_extractor.dart';
+import '../../engine/frame_resampler.dart';
 import '../../engine/retry_gesture_detector.dart';
 import '../../engine/start_gesture_detector.dart';
 import '../providers/evaluation_providers.dart';
@@ -81,6 +82,13 @@ class _EvaluationPageState extends ConsumerState<EvaluationPage>
   final ValueNotifier<PoseFrame> _frames = ValueNotifier(PoseFrame.empty);
   final List<List<double>> _userFrames = [];
 
+  /// Instante (ms desde el ¡YA!) en que llegó la imagen de cada vector de
+  /// [_userFrames]. El detector no siempre llega a 30 fps; con estos tiempos
+  /// la captura se lleva a la rejilla de 33 ms de la referencia antes de
+  /// comparar (ver [FrameResampler]).
+  final List<int> _userTimesMs = [];
+  final Stopwatch _captureClock = Stopwatch();
+
   /// Durante el armado no hace falta inferir a 30 fps: el detector trabaja por
   /// tiempo, no por fotogramas. Procesar 1 de cada 2 baja a la mitad el consumo
   /// en una espera que puede durar minutos.
@@ -103,17 +111,26 @@ class _EvaluationPageState extends ConsumerState<EvaluationPage>
   Timer? _captureTimer;
   double _progress = 0;
 
+  /// Invalida un conteo en curso si se reinicia o se sale antes de que la
+  /// música termine de arrancar.
+  int _countdownToken = 0;
+
   // Conteo audible (RF-08): un pitido por numero y uno largo al arrancar.
   static final _tickSound = AssetSource('sounds/tick.wav');
   static final _goSound = AssetSource('sounds/go.wav');
   final AudioPlayer _tickPlayer = AudioPlayer(playerId: 'countdown_tick');
   final AudioPlayer _goPlayer = AudioPlayer(playerId: 'countdown_go');
 
-  // Musica del paso durante la captura. Es la pista extraida del propio video
-  // ideal (assets/sounds/<pasoId>.m4a), con el mismo recorte, asi que queda
-  // alineada con la referencia por construccion. Sin ella el alumno baila en
-  // silencio mientras el 40% de la nota mide su ritmo.
+  // Musica del intento: suena desde el ¡YA! hasta el final de la captura, NO
+  // durante el conteo. Las 9 tomas de la profesora empiezan en el mismo punto
+  // de musica.mp3 (0.09 s), asi que sirve una sola pista: `musica_intento.m4a`
+  // = el tema desde ese punto. Queda alineada con la referencia: el segundo 0
+  // de la pista es el fotograma 0 de la toma (implementar_pasos.txt §7-quater).
+  static final _attemptMusic = AssetSource('sounds/musica_intento.m4a');
   final AudioPlayer _musicPlayer = AudioPlayer(playerId: 'step_music');
+
+  /// Solo los pasos reales van sobre ese tema; los de prueba usan otro video.
+  bool get _hasMusic => kRealStepIds.contains(widget.stepId);
 
   // Pulso de entrada de cada numero del conteo.
   late final AnimationController _pulse;
@@ -146,7 +163,7 @@ class _EvaluationPageState extends ConsumerState<EvaluationPage>
       }
       await _musicPlayer.setReleaseMode(ReleaseMode.stop);
       await _musicPlayer.setVolume(1);
-      await _musicPlayer.setSource(AssetSource('sounds/${widget.stepId}.m4a'));
+      if (_hasMusic) await _musicPlayer.setSource(_attemptMusic);
     } catch (_) {
       // Sin audio disponible: el conteo sigue siendo visual y la captura mide
       // igual, solo que sin musica de apoyo.
@@ -223,6 +240,9 @@ class _EvaluationPageState extends ConsumerState<EvaluationPage>
       return;
     }
     _busy = true;
+    // Se toma al RECIBIR la imagen, no al terminar la inferencia: la latencia
+    // del modelo es casi constante y no debe contarse como retraso del alumno.
+    final receivedMs = _captureClock.elapsedMilliseconds;
     try {
       final data = cameraFrameFromImage(
         image: image,
@@ -237,11 +257,21 @@ class _EvaluationPageState extends ConsumerState<EvaluationPage>
             rotationDegrees: data.rotationDegrees,
           );
       if (_phase == _Phase.capturing) {
+        // La imagen llega girada; MediaPipe normaliza sobre la imagen ya
+        // vertical, así que alto y ancho se intercambian a 90/270 grados.
+        final upright = data.rotationDegrees % 180 == 0;
+        final aspect = upright
+            ? data.height / data.width
+            : data.width / data.height;
         final v = FeatureExtractor.extractFeatures(
           frame.landmarks,
           isMirrored: ref.read(currentSettingsProvider).mirrorCapture,
+          aspectRatio: aspect,
         );
-        if (v != null) _userFrames.add(v);
+        if (v != null) {
+          _userFrames.add(v);
+          _userTimesMs.add(receivedMs);
+        }
       } else if (_phase == _Phase.arming) {
         _updateArming(frame);
       } else if (_phase == _Phase.results) {
@@ -258,8 +288,10 @@ class _EvaluationPageState extends ConsumerState<EvaluationPage>
   /// Entra en espera activa: el conteo no arranca hasta que el usuario dé la
   /// señal (brazos arriba o quietud) o pulse "Iniciar ahora".
   void _startArming() {
+    _countdownToken++;
     _countdownTimer?.cancel();
     _goTimer?.cancel();
+    _stopStepMusic();
     _gesture
       ..stillnessEnabled = ref.read(currentSettingsProvider).autoStartOnStill
       ..start();
@@ -296,7 +328,8 @@ class _EvaluationPageState extends ConsumerState<EvaluationPage>
     Navigator.of(context).pop(ResultsAction.retry);
   }
 
-  void _startCountdown() {
+  Future<void> _startCountdown() async {
+    final token = ++_countdownToken;
     _countdownTimer?.cancel();
     _goTimer?.cancel();
     setState(() {
@@ -304,9 +337,16 @@ class _EvaluationPageState extends ConsumerState<EvaluationPage>
       _showGo = false;
       _phase = _Phase.countdown;
     });
+    // La música se deja cargada y en el segundo 0 durante el conteo, en
+    // silencio: así en el ¡YA! solo hay que darle play y arranca sin retraso.
+    _prepareStepMusic();
+
     _beat(_tickPlayer, _tickSound, HapticFeedback.mediumImpact);
     _countdownTimer = Timer.periodic(const Duration(seconds: 1), (t) {
-      if (!mounted) return;
+      if (!mounted || token != _countdownToken) {
+        t.cancel();
+        return;
+      }
       if (_countdown <= 1) {
         t.cancel();
         _go();
@@ -321,11 +361,12 @@ class _EvaluationPageState extends ConsumerState<EvaluationPage>
   void _beat(
     AudioPlayer player,
     AssetSource sound,
-    Future<void> Function() haptic,
-  ) {
+    Future<void> Function() haptic, {
+    bool audible = true,
+  }) {
     _pulse.forward(from: 0);
     haptic();
-    _play(player, sound);
+    if (audible) _play(player, sound);
   }
 
   Future<void> _play(AudioPlayer player, AssetSource sound) async {
@@ -337,9 +378,15 @@ class _EvaluationPageState extends ConsumerState<EvaluationPage>
     }
   }
 
-  /// "YA": arranca la captura en el mismo instante que el pitido largo.
-  void _go() {
-    _beat(_goPlayer, _goSound, HapticFeedback.heavyImpact);
+  /// "YA": arranca la música y la captura a la vez. Con música no suena el
+  /// pitido largo: se pisaría con el primer tiempo del tema.
+  Future<void> _go() async {
+    final token = _countdownToken;
+    final withMusic = await _startStepMusic();
+    if (!mounted || token != _countdownToken || _phase != _Phase.countdown) {
+      return;
+    }
+    _beat(_goPlayer, _goSound, HapticFeedback.heavyImpact, audible: !withMusic);
     setState(() => _showGo = true);
     _startCapture();
     _goTimer?.cancel();
@@ -348,14 +395,19 @@ class _EvaluationPageState extends ConsumerState<EvaluationPage>
     });
   }
 
+  int get _captureDurationMs =>
+      (_refFrames.length * FrameResampler.stepMs).clamp(1000, 60000).toInt();
+
   void _startCapture() {
     _userFrames.clear();
+    _userTimesMs.clear();
+    _captureClock
+      ..reset()
+      ..start();
     // Captura sincronizada con la duración real del video guía (RN-07):
     // la referencia se muestrea cada 33 ms (~30 fps).
-    final durationMs =
-        (_refFrames.length * 33).clamp(1000, 60000).toInt();
+    final durationMs = _captureDurationMs;
     final start = DateTime.now();
-    _playStepMusic();
     setState(() {
       _phase = _Phase.capturing;
       _progress = 0;
@@ -374,14 +426,27 @@ class _EvaluationPageState extends ConsumerState<EvaluationPage>
     });
   }
 
-  /// Arranca la musica del paso desde el principio, en paralelo a la captura.
-  /// Si el asset no existe, la evaluacion sigue sin musica.
-  Future<void> _playStepMusic() async {
+  /// Detiene lo que sonara y deja la pista cargada al principio.
+  Future<void> _prepareStepMusic() async {
+    if (!_hasMusic) return;
     try {
       await _musicPlayer.stop();
-      await _musicPlayer.play(AssetSource('sounds/${widget.stepId}.m4a'));
+      await _musicPlayer.setSource(_attemptMusic);
     } catch (_) {
-      // Sin musica: la captura no depende de ella.
+      // Sin música: la captura no depende de ella.
+    }
+  }
+
+  /// Arranca la música desde el principio. Devuelve `false` si el paso no
+  /// tiene música o no se pudo reproducir (la captura sigue igual).
+  Future<bool> _startStepMusic() async {
+    if (!_hasMusic) return false;
+    try {
+      await _musicPlayer.seek(Duration.zero);
+      await _musicPlayer.resume();
+      return true;
+    } catch (_) {
+      return false;
     }
   }
 
@@ -394,24 +459,29 @@ class _EvaluationPageState extends ConsumerState<EvaluationPage>
   }
 
   Future<void> _finishCapture() async {
-    await _stopStepMusic();
+    _captureClock.stop();
     setState(() => _phase = _Phase.computing);
-    final result = DtwComparator.compare(
+    await _stopStepMusic();
+    final user = FrameResampler.toGrid(
       _userFrames,
+      _userTimesMs,
+      durationMs: _captureDurationMs,
+    );
+    final result = DtwComparator.compare(
+      user,
       _refFrames,
-      weights: _step?.weights,
-      // Umbrales calibrados para ESTE paso (§7-ter): el coste normalizado de
-      // una misma calidad de ejecución varía 25x entre pasos, así que una
-      // curva global no sirve.
+      // Pesos del código para los pasos reales: el documento de Firestore
+      // puede ser de una siembra anterior (22 features, brazos a 0).
+      weights: kStepWeights[widget.stepId] ?? _step?.weights,
       params: paramsFor(widget.stepId),
     );
 
     // Guardar intento (RN-04: la mejor marca se deriva del máximo en HISTORY).
-    final user = ref.read(currentUserProvider);
-    if (user.isNotEmpty) {
+    final account = ref.read(currentUserProvider);
+    if (account.isNotEmpty) {
       try {
         await ref.read(attemptRepositoryProvider).save(
-              uid: user.uid,
+              uid: account.uid,
               pasoId: widget.stepId,
               result: result,
             );
@@ -454,7 +524,12 @@ class _EvaluationPageState extends ConsumerState<EvaluationPage>
       // lejos del teléfono: vuelve al armado para que se recoloque sin prisa.
       _startArming();
     } else if (action == ResultsAction.next && nextId != null) {
-      context.pushReplacement('${AppRoutes.evaluate}/$nextId');
+      // Siguiente = ficha del siguiente paso (video guía), igual que desde el
+      // catálogo. La ficha actual recibe el id y se sustituye a sí misma; así
+      // "atrás" vuelve al catálogo y no a este paso. Abrir directamente otra
+      // evaluación dejaba la cámara en negro: la nueva pantalla pedía la
+      // cámara antes de que esta terminara de liberarla.
+      context.pop(nextId);
     } else {
       context.pop();
     }
@@ -473,6 +548,7 @@ class _EvaluationPageState extends ConsumerState<EvaluationPage>
     _gesture.reset();
     _retryGesture.reset();
     _frames.dispose();
+    _countdownToken++;
     _countdownTimer?.cancel();
     _goTimer?.cancel();
     _captureTimer?.cancel();

@@ -4,12 +4,14 @@ import 'package:flutter/services.dart' show Clipboard, ClipboardData;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/config/app_constants.dart';
-import '../../../auth/presentation/providers/auth_providers.dart';
 import '../../../catalog/data/catalog_seed.dart';
+import '../../../catalog/domain/step_weights.dart';
 import '../../../catalog/presentation/providers/catalog_providers.dart';
 import '../../../evaluation/engine/dtw_comparator.dart';
 import '../../../evaluation/engine/dtw_result.dart';
+import '../../../evaluation/engine/step_params.dart';
 import '../../../evaluation/presentation/providers/evaluation_providers.dart';
+import '../../../evaluation/presentation/widgets/reset_progress.dart';
 import '../providers/settings_providers.dart';
 
 /// Configuración (RF-01): preferencias del usuario persistidas en
@@ -85,7 +87,7 @@ class SettingsPage extends ConsumerWidget {
           const _SeedCatalogTile(),
           const _UploadReferenceTile(),
           const _CalibrateEngineTile(),
-          const _ResetTestProgressTile(),
+          const _ResetProgressTile(),
         ],
       ],
     );
@@ -246,7 +248,7 @@ class _CalibrateEngineTileState extends ConsumerState<_CalibrateEngineTile> {
     final proc = ref.read(videoPoseProcessorProvider);
     final buffer = StringBuffer()
       ..writeln('BANCO DE CALIBRACIÓN — ${DateTime.now()}')
-      ..writeln('objetivo: ideal 95-100 % | regular 40-60 %')
+      ..writeln('objetivo: ideal 95-100 % | regular ~50 %')
       ..writeln('');
 
     final steps = kRealSteps.where((s) => s.hasVideo).toList(growable: false);
@@ -261,15 +263,21 @@ class _CalibrateEngineTileState extends ConsumerState<_CalibrateEngineTile> {
               '(ideal ${idealF.length}, regular ${regF.length})');
           continue;
         }
-        final self =
-            DtwComparator.compare(idealF, idealF, weights: step.weights);
-        final reg = DtwComparator.compare(regF, idealF, weights: step.weights);
+        // Mismos pesos y parámetros que la evaluación real.
+        final weights = kStepWeights[step.id] ?? step.weights;
+        final params = paramsFor(step.id);
+        final self = DtwComparator.compare(idealF, idealF,
+            weights: weights, params: params);
+        final reg = DtwComparator.compare(regF, idealF,
+            weights: weights, params: params);
         buffer
           ..writeln(step.id)
           ..writeln('  fotogramas   ideal ${idealF.length} | regular ${regF.length}')
           ..writeln('  ideal-vs-ideal   ${self.score} %')
           ..writeln('  regular-vs-ideal ${reg.score} % '
               '(align ${reg.alignmentScore}, ritmo ${reg.rhythmScore})')
+          ..writeln('  costeRel ${reg.relativeCost.toStringAsFixed(2)} '
+              '| cobertura ${reg.coverage.toStringAsFixed(2)}')
           ..writeln('  normCost ${reg.normalizedCost.toStringAsFixed(3)} '
               '| peor: ${_worst(reg)}')
           ..writeln('');
@@ -322,65 +330,23 @@ class _CalibrateEngineTileState extends ConsumerState<_CalibrateEngineTile> {
   }
 }
 
-/// Dev TEMPORAL: borra del HISTORY los intentos del usuario en los pasos de
-/// prueba, para re-testear la sincronización de la mejor marca desde cero.
-class _ResetTestProgressTile extends ConsumerStatefulWidget {
-  const _ResetTestProgressTile();
+/// Dev TEMPORAL: reinicia a 0 el progreso del usuario en TODOS los pasos
+/// (borra sus intentos de HISTORY). Cada ficha de paso tiene el mismo botón
+/// para un solo paso.
+class _ResetProgressTile extends ConsumerStatefulWidget {
+  const _ResetProgressTile();
 
   @override
-  ConsumerState<_ResetTestProgressTile> createState() =>
-      _ResetTestProgressTileState();
+  ConsumerState<_ResetProgressTile> createState() => _ResetProgressTileState();
 }
 
-class _ResetTestProgressTileState
-    extends ConsumerState<_ResetTestProgressTile> {
+class _ResetProgressTileState extends ConsumerState<_ResetProgressTile> {
   bool _busy = false;
 
   Future<void> _reset() async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('¿Borrar progreso de prueba?'),
-        content: const Text(
-            'Se eliminarán TODOS tus intentos de los pasos de prueba '
-            '(1, 2 y 3). No se puede deshacer.'),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.of(context).pop(false),
-              child: const Text('Cancelar')),
-          FilledButton(
-              onPressed: () => Navigator.of(context).pop(true),
-              child: const Text('Borrar')),
-        ],
-      ),
-    );
-    if (confirmed != true || !mounted) return;
-
     setState(() => _busy = true);
-    final messenger = ScaffoldMessenger.of(context);
     try {
-      final uid = ref.read(currentUserProvider).uid;
-      if (uid.isEmpty) return;
-      final firestore = ref.read(firebaseFirestoreProvider);
-      final snap = await firestore
-          .collection(AppConstants.historyCollection)
-          .where('uid', isEqualTo: uid)
-          .where('pasoId', whereIn: kTestStepIds)
-          .get();
-      final batch = firestore.batch();
-      for (final doc in snap.docs) {
-        batch.delete(doc.reference);
-      }
-      await batch.commit();
-      // Refresca mejores marcas y progreso.
-      ref.invalidate(bestScoreProvider);
-      ref.invalidate(userBestScoresProvider);
-      messenger.showSnackBar(
-        SnackBar(
-            content: Text('Progreso borrado: ${snap.docs.length} intentos.')),
-      );
-    } catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text('Error al borrar: $e')));
+      await confirmAndResetProgress(context, ref);
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -391,8 +357,8 @@ class _ResetTestProgressTileState
     return ListTile(
       leading: Icon(Icons.delete_forever_outlined,
           color: Theme.of(context).colorScheme.error),
-      title: const Text('Borrar progreso de prueba (dev)'),
-      subtitle: const Text('Elimina tus intentos de los pasos de prueba.'),
+      title: const Text('Reiniciar todo el progreso (dev)'),
+      subtitle: const Text('Borra tus intentos de todos los pasos.'),
       trailing: _busy
           ? const SizedBox(
               width: 18, height: 18,

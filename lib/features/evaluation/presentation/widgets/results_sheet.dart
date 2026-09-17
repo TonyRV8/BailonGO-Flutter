@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/material.dart';
 
 import '../../domain/evaluation_feedback.dart';
@@ -68,6 +69,20 @@ class ResultsSheet extends StatelessWidget {
                       ),
                     ],
                   ),
+                  // TEMPORAL (dev): datos crudos del motor para recalibrar con
+                  // intentos reales (tool/bench.dart). costeRel: 0 = igual que
+                  // el modelo, 1 = como quedarse quieto.
+                  if (kDebugMode) ...[
+                    const SizedBox(height: 8),
+                    SelectableText(
+                      'dev · costeRel ${result.relativeCost.toStringAsFixed(2)}'
+                      ' · cobertura ${result.coverage.toStringAsFixed(2)}'
+                      ' · espejo ${result.mirrorFactor.toStringAsFixed(2)}'
+                      ' · tramos ${result.segmentAlignment.join('/')}',
+                      textAlign: TextAlign.center,
+                      style: theme.textTheme.bodySmall,
+                    ),
+                  ],
                   const SizedBox(height: 16),
                   Container(
                     padding: const EdgeInsets.all(12),
