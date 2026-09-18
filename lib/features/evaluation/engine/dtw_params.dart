@@ -7,34 +7,50 @@
 /// Revisión 2 (2026-09-17): la curva de alineación trabaja sobre el COSTE
 /// RELATIVO (coste / coste de quedarse quieto), una escala común a todos los
 /// pasos. Ver la cabecera de `DtwComparator` para el porqué de cada bloque.
+///
+/// Revisión 3 (2026-09-18): defaults re-barridos contra TOMAS REALES
+/// etiquetadas de alumnos (`tool/bench_real.dart`, implementar_pasos.txt
+/// §7-sexies). Cambios respecto a la revisión 2:
+///   * `userAmplitudeNormalize`: el alumno se mide en su propia dispersión
+///     (forma y fase, no magnitud). Los alumnos reales mueven pies y cadera
+///     1.3-2.7x más que la profesora y con la escala de la referencia costaban
+///     tanto como quedarse quietos → alineación 0 bailando bien.
+///   * ritmo mucho más estricto (correlación 0.30 → 0, 0.70 → 100, lag ±12):
+///     un baile que no tiene nada que ver sacaba 47-93 de ritmo.
+///   * cobertura 0.05/0.35 sin mínimo, clip 4, postura media 0.5, curva 0.6,
+///     banda 0.16. `snrK` 8 y amplitud mínima 3× temblor se CONSERVAN aunque
+///     el barrido prefiriera 2 y 1×: sobre tomas reales solo cuesta +1 de
+///     pérdida y con ruido de cámara (bench.dart) evita que las features casi
+///     quietas del básico amplifiquen el temblor.
 class DtwParams {
   const DtwParams({
     this.alignNoiseFloor = 0.2,
     this.alignMax = 1.2,
-    this.alignCurvePower = 0.8,
-    this.bandRatio = 0.12,
+    this.alignCurvePower = 0.6,
+    this.bandRatio = 0.16,
     this.smoothWindow = 5,
     this.centerFeatures = true,
-    this.featureClip = 2.0,
-    this.offsetWeight = 0.05,
+    this.featureClip = 4.0,
+    this.offsetWeight = 0.5,
     this.minMotion = 0.02,
     this.featureNoise = defaultFeatureNoise,
     this.noiseScale = 1.0,
     this.snrK = 8.0,
     this.amplitudeNormalize = true,
     this.amplitudeNoiseMul = 3.0,
+    this.userAmplitudeNormalize = true,
     this.alignWeight = 0.6,
     this.rhythmWeight = 0.4,
     this.coverageWindow = 30,
     this.coverageIgnoreBelow = 0.3,
-    this.coverageFullRatio = 0.45,
-    this.coverageZeroRatio = 0.25,
+    this.coverageFullRatio = 0.35,
+    this.coverageZeroRatio = 0.05,
     this.coverageMinFactor = 0.0,
     this.rhythmWindow = 60,
-    this.rhythmMaxLag = 8,
+    this.rhythmMaxLag = 12,
     this.rhythmSmooth = 5,
-    this.rhythmCorrZero = 0.0,
-    this.rhythmCorrFull = 0.3,
+    this.rhythmCorrZero = 0.3,
+    this.rhythmCorrFull = 0.7,
     this.globalFromSegments = true,
     this.mirrorFullSeverity = 0.35,
     this.mirrorMinFactor = 0.15,
@@ -87,6 +103,14 @@ class DtwParams {
   /// global. Ver `DtwComparator.compare`.
   final bool amplitudeNormalize;
   final double amplitudeNoiseMul;
+
+  /// Medir también al USUARIO en unidades de su propia dispersión por feature
+  /// (mínimo [amplitudeNoiseMul] × temblor), no en las de la referencia. Así
+  /// el coste compara la FORMA y la FASE del movimiento y no su magnitud: un
+  /// alumno que hace el paso bien pero con el doble de amplitud (medido en
+  /// las tomas reales: 1.3-2.7x en orientación del pie) dejaba de puntuar
+  /// porque costaba tanto como quedarse quieto.
+  final bool userAmplitudeNormalize;
 
   /// Medido con `dart run tool/bench.dart tool/landmarks.json --snr` sobre el
   /// escenario "quieto" (cámara 480x720, temblor ~3x el de las tomas). Las más
@@ -193,6 +217,7 @@ class DtwParams {
     double? snrK,
     bool? amplitudeNormalize,
     double? amplitudeNoiseMul,
+    bool? userAmplitudeNormalize,
     int? coverageWindow,
     double? coverageIgnoreBelow,
     double? coverageFullRatio,
@@ -223,6 +248,8 @@ class DtwParams {
         snrK: snrK ?? this.snrK,
         amplitudeNormalize: amplitudeNormalize ?? this.amplitudeNormalize,
         amplitudeNoiseMul: amplitudeNoiseMul ?? this.amplitudeNoiseMul,
+        userAmplitudeNormalize:
+            userAmplitudeNormalize ?? this.userAmplitudeNormalize,
         alignWeight: alignWeight,
         rhythmWeight: rhythmWeight,
         coverageWindow: coverageWindow ?? this.coverageWindow,
@@ -248,7 +275,8 @@ class DtwParams {
       'pow ${alignCurvePower.toStringAsFixed(2)}, '
       'band ${bandRatio.toStringAsFixed(2)}, '
       'center $centerFeatures, clip $featureClip, off $offsetWeight, '
-      'noise x$noiseScale k$snrK, ampNorm $amplitudeNormalize x$amplitudeNoiseMul, '
+      'noise x$noiseScale k$snrK, ampNorm $amplitudeNormalize x$amplitudeNoiseMul'
+      '${userAmplitudeNormalize ? ' uamp' : ''}, '
       'cov ${coverageZeroRatio.toStringAsFixed(2)}/${coverageFullRatio.toStringAsFixed(2)}'
       '@${coverageMinFactor.toStringAsFixed(2)} w$coverageWindow, '
       'rhy ${rhythmCorrZero.toStringAsFixed(2)}/${rhythmCorrFull.toStringAsFixed(2)} '

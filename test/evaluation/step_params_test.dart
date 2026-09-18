@@ -4,9 +4,9 @@ import 'package:bailongo/features/evaluation/engine/feature_extractor.dart';
 import 'package:bailongo/features/evaluation/engine/step_params.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-/// Congela la calibración (§7-quinquies). No mide scores —eso lo hace
-/// `tool/bench.dart` con las tomas, que no se versionan— sino que protege las
-/// invariantes que hacen que esos scores sigan siendo válidos.
+/// Congela la calibración (§7-sexies). No mide scores —eso lo hace
+/// `tool/bench_real.dart` con las tomas, que no se versionan— sino que protege
+/// las invariantes que hacen que esos scores sigan siendo válidos.
 void main() {
   group('parámetros por paso', () {
     test('los 9 pasos reales tienen calibración propia', () {
@@ -25,11 +25,13 @@ void main() {
       const d = DtwParams.defaults;
       for (final id in kRealStepIds) {
         final p = paramsFor(id);
-        // Acotado para que ningún paso quede tan laxo que estar quieto
-        // apruebe (lo que le pasó a cucaracha en §7-ter).
-        expect(p.alignMax, inInclusiveRange(0.9, 2.2), reason: id);
-        expect(p.alignNoiseFloor, inInclusiveRange(0.1, 0.7), reason: id);
-        expect(p.alignMax, greaterThanOrEqualTo(p.alignNoiseFloor + 0.25), reason: id);
+        // Acotado para que ningún paso quede indefendible: la toma regular
+        // de la profesora cuesta ~0.9, así que el suelo tiene que quedar por
+        // debajo (curva, no meseta) y el tramo suelo→techo no puede ser un
+        // acantilado (§7-sexies).
+        expect(p.alignMax, inInclusiveRange(1.0, 2.2), reason: id);
+        expect(p.alignNoiseFloor, inInclusiveRange(0.05, 0.7), reason: id);
+        expect(p.alignMax, greaterThanOrEqualTo(p.alignNoiseFloor + 0.4), reason: id);
         expect(p.alignCurvePower, d.alignCurvePower, reason: id);
         expect(p.coverageZeroRatio, d.coverageZeroRatio, reason: id);
         expect(p.rhythmCorrFull, d.rhythmCorrFull, reason: id);

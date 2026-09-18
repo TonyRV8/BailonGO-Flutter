@@ -94,6 +94,11 @@ void main() {
         durationMs: ref.length * FrameResampler.stepMs);
     expect(grid.length, ref.length);
     final r = DtwComparator.compare(withJitter(grid, 0.01, 5), ref);
-    expect(r.score, greaterThanOrEqualTo(85));
+    // La alineación no debe resentirse (el remuestreo lo absorbe). El ritmo
+    // sí baja algo: la interpolación de huecos de 50-90 ms aplana los acentos
+    // del perfil de velocidad y desde §7-sexies el ritmo es estricto para
+    // separar bailes ajenos (correlación 0.30 → 0, 0.70 → 100).
+    expect(r.alignmentScore, greaterThanOrEqualTo(95));
+    expect(r.score, greaterThanOrEqualTo(80));
   });
 }

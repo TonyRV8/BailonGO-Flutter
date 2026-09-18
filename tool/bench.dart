@@ -8,8 +8,8 @@
 ///
 ///   bueno_vivo      toma de 10 con ruido de cámara, otra proporción corporal,
 ///                   cámara 480x720, retraso de reacción y fps irregulares
-///   malo / malo_vivo  toma de 5 (etiqueta de la experta)
-///   mezcla75        75 % buena + 25 % mala (≈ 7.5/10)
+///   malo / malo_vivo  toma "regular" de la profesora (re-etiquetada 7-8/10)
+///   mezcla75        75 % buena + 25 % regular
 ///   quieto          se queda parado todo el intento
 ///   quieto_mitad    baila la primera mitad y se para (bug reportado: 99 %)
 ///   quieto_final    se para en el último cuarto
@@ -245,9 +245,13 @@ const scenarios = <Scenario>[
   // de la profesora: mismos brazos, misma amplitud, mismo fraseo. Un alumno
   // que lo hace bien difiere justo en eso. Este escenario es el que manda.
   Scenario('alumno_bien', 85, 8, weight: 4),
-  Scenario('malo', 50, 6, weight: 2),
-  Scenario('malo_vivo', 48, 8, weight: 2),
-  Scenario('mezcla75', 75, 10),
+  // 2026-09-18: la toma "regular" se re-etiquetó de 5/10 a 7-8/10 tras la
+  // revisión humana (§7-sexies). La calibración ya NO se hace aquí sino en
+  // tool/bench_real.dart con tomas reales; este banco queda como control de
+  // robustez (ruido de cámara, quieto, otro paso, espejo, lento).
+  Scenario('malo', 75, 6, weight: 2),
+  Scenario('malo_vivo', 72, 8, weight: 2),
+  Scenario('mezcla75', 88, 10),
   Scenario('quieto', 0, 8, weight: 3),
   Scenario('quieto_mitad', 30, 18, weight: 3),
   Scenario('quieto_final', 62, 13),

@@ -42,6 +42,16 @@ import 'feature_extractor.dart';
 ///    un pequeño margen de reacción: los acentos del paso tienen que caer
 ///    donde caen en el modelo. La desviación del camino se conserva para los
 ///    consejos de "vas adelantado / atrasado".
+///
+/// Revisión 3 (2026-09-18), con tomas reales de alumnos (`tool/bench_real.dart`):
+///
+/// 5. FORMA, NO MAGNITUD. Con [DtwParams.userAmplitudeNormalize] el alumno se
+///    mide en unidades de su PROPIA dispersión por feature. Los alumnos reales
+///    mueven pies y cadera 1.3-2.7x más que la profesora; medidos en la escala
+///    de la referencia, un movimiento correcto pero amplificado costaba igual
+///    que quedarse quieto (coste relativo ≈ 1) y la alineación salía 0. La
+///    cobertura y el ritmo siguen midiéndose en la escala de la referencia,
+///    así que quedarse quieto o moverse poco sigue penalizando.
 class DtwComparator {
   DtwComparator._();
 
@@ -117,6 +127,19 @@ class DtwComparator {
       noise = [for (var c = 0; c < featureSize; c++) noise[c] / scale[c]];
     }
 
+    // Cobertura y ritmo se miden en la escala de la REFERENCIA (cuánto se
+    // movió el usuario frente al modelo); el coste de alineación, si se pide,
+    // en la del propio usuario: forma y fase, no magnitud.
+    var uAlign = u;
+    if (params.userAmplitudeNormalize) {
+      final spreadU = _featureSpread(u, featureSize);
+      final scaleU = List<double>.generate(
+          featureSize,
+          (c) => math.max(spreadU[c],
+              math.max(params.amplitudeNoiseMul * noise[c], 1e-6)));
+      uAlign = _divided(u, scaleU);
+    }
+
     final n = u.length;
     final m = r.length;
     final band = math.max(
@@ -146,7 +169,8 @@ class DtwComparator {
       final jLow = math.max(1, i - band);
       final jHigh = math.min(m, i + band);
       for (var j = jLow; j <= jHigh; j++) {
-        final cost = _dist(u[i - 1], r[j - 1], featureSize, w8, wsum, params);
+        final cost =
+            _dist(uAlign[i - 1], r[j - 1], featureSize, w8, wsum, params);
         final c0 = at(i - 1, j - 1);
         final c1 = at(i - 1, j);
         final c2 = at(i, j - 1);
@@ -192,7 +216,7 @@ class DtwComparator {
 
     var ci = n, cj = m;
     while (ci > 0 && cj > 0) {
-      final ui = u[ci - 1];
+      final ui = uAlign[ci - 1];
       final rj = r[cj - 1];
       final cost = _dist(ui, rj, featureSize, w8, wsum, params);
       userFrameCostSum[ci] += cost;
@@ -272,13 +296,15 @@ class DtwComparator {
     final mirrorFactor = _mirrorToFactor(directAvg, mirrorAvg, params);
 
     // ── Ritmo por correlación de acentos ─────────────────────────────
-    final rhythm = _rhythm(u, r, featureSize, w8, wsum, params);
+    final rhythm = _rhythm(u, r, featureSize, w8, wsum, noise, params);
+
+    double relWithOffset(double cost, double still) {
+      final rel = relative(cost, still);
+      return math.sqrt(rel * rel + params.offsetWeight * offset * offset);
+    }
 
     int alignScore(double cost, double still, double cov) {
-      final rel = relative(cost, still);
-      final withOffset =
-          math.sqrt(rel * rel + params.offsetWeight * offset * offset);
-      final base = _costToAlignScore(withOffset, params);
+      final base = _costToAlignScore(relWithOffset(cost, still), params);
       return _applyFactor(
           base, mirrorFactor * _coverageToFactor(cov, params));
     }
@@ -293,6 +319,15 @@ class DtwComparator {
       return alignScore(segCostSum[s] / segFrameCount[s],
           segStill[s] / segStillCount[s], coverage.segments[s]);
     });
+    final segRelCost = List<double>.generate(3, (s) {
+      if (segFrameCount[s] == 0 || segStillCount[s] == 0) {
+        return double.infinity;
+      }
+      return relWithOffset(
+          segCostSum[s] / segFrameCount[s], segStill[s] / segStillCount[s]);
+    });
+    final segFactor = List<double>.generate(3,
+        (s) => mirrorFactor * _coverageToFactor(coverage.segments[s], params));
     final segRhythm = List<int>.generate(
         3, (s) => rhythmScore(rhythm.segments[s], coverage.segments[s]));
     final segScore = List<int>.generate(
@@ -303,6 +338,10 @@ class DtwComparator {
           .clamp(0, 100)
           .toInt(),
     );
+    final pathDeviation = segDevCount.reduce((a, b) => a + b) > 0
+        ? segDevSum.reduce((a, b) => a + b) /
+            segDevCount.reduce((a, b) => a + b)
+        : 0.0;
     final segTempo = List<double>.generate(
       3,
       (s) => segDevCount[s] > 0 ? segDevSignedSum[s] / segDevCount[s] : 0.0,
@@ -359,6 +398,9 @@ class DtwComparator {
       coverage: coverage.all,
       coverageFactor: coverageFactor,
       mirrorFactor: mirrorFactor,
+      pathDeviation: pathDeviation,
+      segmentRelativeCost: segRelCost,
+      segmentFactor: segFactor,
       segmentRhythm: segRhythm,
       segmentAlignment: segAlignment,
       segmentScore: segScore,
@@ -372,6 +414,12 @@ class DtwComparator {
 
   static int _segmentOf(int index, int length) =>
       (index * 3 ~/ math.max(length, 1)).clamp(0, 2).toInt();
+
+  /// Curva coste relativo → alineación (0-100). Pública para que el banco de
+  /// calibración pueda re-mapear un resultado con otra curva sin repetir el
+  /// DTW.
+  static int costToAlignScore(double rel, DtwParams params) =>
+      _costToAlignScore(rel, params);
 
   static int _costToAlignScore(double rel, DtwParams params) {
     if (rel <= params.alignNoiseFloor) return 100;
@@ -490,9 +538,10 @@ class DtwComparator {
     int size,
     List<double> w8,
     double wsum,
+    List<double> noise,
     DtwParams params,
   ) {
-    final su = _speed(u, size, w8, wsum, params);
+    final su = _speed(u, size, w8, wsum, params, noise: noise);
     final sr = _speed(r, size, w8, wsum, params);
     final n = su.length, m = sr.length;
     if (n < 8 || m < 8) return (all: 1.0, segments: [1.0, 1.0, 1.0]);
@@ -548,14 +597,26 @@ class DtwComparator {
 
   /// Velocidad por fotograma (distancia ponderada entre fotogramas
   /// consecutivos), suavizada para que el temblor del detector no domine.
+  /// Con [noise] se descuenta la varianza que el temblor añade a cada
+  /// diferencia (2·σ² por feature, ya suavizada): si no, un intento perfecto
+  /// con cámara ruidosa lleva un suelo de velocidad constante que aplana los
+  /// acentos y hunde la correlación con el modelo.
   static List<double> _speed(List<List<double>> f, int size, List<double> w8,
-      double wsum, DtwParams params) {
+      double wsum, DtwParams params,
+      {List<double>? noise}) {
     if (f.length < 2) return const [];
+    // El suavizado pre-DTW (media móvil de `smoothWindow`) reduce la varianza
+    // del temblor en ~1/ventana.
+    final smoothGain = 1 / math.max(params.smoothWindow, 1);
     final raw = List<double>.generate(f.length - 1, (t) {
       var s = 0.0;
       for (var c = 0; c < size; c++) {
         final d = f[t + 1][c] - f[t][c];
-        s += w8[c] * d * d;
+        var d2 = d * d;
+        if (noise != null) {
+          d2 = math.max(0, d2 - 2 * noise[c] * noise[c] * smoothGain);
+        }
+        s += w8[c] * d2;
       }
       return math.sqrt(s / wsum);
     });

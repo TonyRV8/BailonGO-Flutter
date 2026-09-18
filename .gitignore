@@ -91,3 +91,5 @@ Thumbs.db
 # Landmarks extraídos en PC para calibrar (22 MB, regenerable en ~4 min con
 # tool/extract_landmarks.py). No se versiona.
 /tool/landmarks.json
+/tool/landmarks_revisados.json
+/tool/__pycache__/

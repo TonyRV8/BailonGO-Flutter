@@ -10,6 +10,9 @@ class DtwResult {
     this.coverage = 1,
     this.coverageFactor = 1,
     this.mirrorFactor = 1,
+    this.pathDeviation = 0,
+    this.segmentRelativeCost = const [],
+    this.segmentFactor = const [],
     required this.segmentRhythm,
     required this.segmentAlignment,
     required this.segmentScore,
@@ -38,6 +41,18 @@ class DtwResult {
   /// invertida (1 = sin castigo). Diagnóstico para el banco y el feedback.
   final double coverageFactor;
   final double mirrorFactor;
+
+  /// Desviación media absoluta del camino DTW respecto a la diagonal,
+  /// normalizada por max(n, m): cuánto hubo que deformar el tiempo para
+  /// alinear al usuario. Diagnóstico.
+  final double pathDeviation;
+
+  /// Diagnóstico para el banco de calibración: coste relativo (ya con la
+  /// postura media) y factor cobertura×espejo de cada tramo. Con ellos y
+  /// [segmentRhythm] se puede recomputar la nota para otra curva de
+  /// alineación sin repetir el DTW. Infinito = tramo sin fotogramas.
+  final List<double> segmentRelativeCost;
+  final List<double> segmentFactor;
   final List<int> segmentRhythm;
   final List<int> segmentAlignment;
 
