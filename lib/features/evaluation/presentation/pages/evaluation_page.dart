@@ -89,6 +89,16 @@ class _EvaluationPageState extends ConsumerState<EvaluationPage>
   final List<int> _userTimesMs = [];
   final Stopwatch _captureClock = Stopwatch();
 
+  /// Identifica la captura en curso. La inferencia de cada imagen es
+  /// asíncrona (~30-60 ms), así que una imagen recibida ANTES del ¡YA! puede
+  /// terminar de procesarse ya dentro de la captura. Su marca de tiempo sería
+  /// la del reloj parado, es decir la del intento ANTERIOR, y quedaría la
+  /// primera de [_userTimesMs] con un valor mayor que toda la ventana: el
+  /// remuestreo devolvía entonces la primera pose repetida y el intento
+  /// puntuaba 0 %. Ocurría a partir del segundo intento, porque en el primero
+  /// el reloj aún marca cero.
+  int _captureToken = 0;
+
   /// Durante el armado no hace falta inferir a 30 fps: el detector trabaja por
   /// tiempo, no por fotogramas. Procesar 1 de cada 2 baja a la mitad el consumo
   /// en una espera que puede durar minutos.
@@ -242,7 +252,11 @@ class _EvaluationPageState extends ConsumerState<EvaluationPage>
     _busy = true;
     // Se toma al RECIBIR la imagen, no al terminar la inferencia: la latencia
     // del modelo es casi constante y no debe contarse como retraso del alumno.
-    final receivedMs = _captureClock.elapsedMilliseconds;
+    // Solo vale si la captura ya estaba en marcha al llegar la imagen; si no,
+    // el reloj está parado y su lectura pertenece al intento anterior.
+    final capturing = _captureClock.isRunning;
+    final receivedMs = capturing ? _captureClock.elapsedMilliseconds : -1;
+    final token = _captureToken;
     try {
       final data = cameraFrameFromImage(
         image: image,
@@ -256,7 +270,9 @@ class _EvaluationPageState extends ConsumerState<EvaluationPage>
             height: data.height,
             rotationDegrees: data.rotationDegrees,
           );
-      if (_phase == _Phase.capturing) {
+      // `capturing` y `token` descartan las imágenes que empezaron a
+      // procesarse fuera de ESTA captura (ver [_captureToken]).
+      if (_phase == _Phase.capturing && capturing && token == _captureToken) {
         // La imagen llega girada; MediaPipe normaliza sobre la imagen ya
         // vertical, así que alto y ancho se intercambian a 90/270 grados.
         final upright = data.rotationDegrees % 180 == 0;
@@ -399,6 +415,7 @@ class _EvaluationPageState extends ConsumerState<EvaluationPage>
       (_refFrames.length * FrameResampler.stepMs).clamp(1000, 60000).toInt();
 
   void _startCapture() {
+    _captureToken++;
     _userFrames.clear();
     _userTimesMs.clear();
     _captureClock

@@ -20,6 +20,13 @@ class FrameResampler {
   /// [frames] y [timesMs] van en paralelo y en orden creciente de tiempo
   /// (ms desde el inicio de la captura). Devuelve `durationMs / stepMs`
   /// vectores. Antes del primer fotograma se repite el primero.
+  ///
+  /// Si los tiempos llegan desordenados se ordenan antes de recorrerlos: el
+  /// barrido de abajo asume que crecen y, con una sola muestra fuera de sitio
+  /// al principio, devolvía la primera pose repetida en toda la ventana —una
+  /// captura "inmóvil" que puntúa 0 %—. Quien llama no debería entregar
+  /// tiempos desordenados (ver `_captureToken` en la pantalla de evaluación);
+  /// esto es una red de seguridad, no el camino normal.
   static List<List<double>> toGrid(
     List<List<double>> frames,
     List<int> timesMs, {
@@ -27,6 +34,19 @@ class FrameResampler {
   }) {
     assert(frames.length == timesMs.length);
     if (frames.isEmpty) return const [];
+    var sorted = false;
+    for (var i = 1; i < timesMs.length; i++) {
+      if (timesMs[i] < timesMs[i - 1]) {
+        sorted = true;
+        break;
+      }
+    }
+    if (sorted) {
+      final order = List<int>.generate(timesMs.length, (i) => i)
+        ..sort((a, b) => timesMs[a].compareTo(timesMs[b]));
+      frames = [for (final i in order) frames[i]];
+      timesMs = [for (final i in order) timesMs[i]];
+    }
     final count = (durationMs / stepMs).round();
     final out = <List<double>>[];
     var j = 0;

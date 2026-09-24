@@ -58,5 +58,25 @@ void main() {
     test('sin fotogramas -> vacío', () {
       expect(FrameResampler.toGrid([], [], durationMs: 1000), isEmpty);
     });
+
+    test('una marca de tiempo del intento anterior no aplana la captura', () {
+      // Bug de reintento: la imagen que empezó a procesarse antes del ¡YA!
+      // entraba con el tiempo del reloj parado (la duración del intento
+      // anterior). Como quedaba la primera de la lista y superaba toda la
+      // ventana, la rejilla salía constante y el intento puntuaba 0 %.
+      final frames = <List<double>>[
+        [999.0], // llegó fuera de orden, con el tiempo del intento anterior
+        for (var t = 0; t < 1000; t += 33) [t.toDouble()],
+      ];
+      final times = <int>[
+        1000,
+        for (var t = 0; t < 1000; t += 33) t,
+      ];
+      final grid = FrameResampler.toGrid(frames, times, durationMs: 1000);
+      expect(grid.length, 30);
+      // La captura conserva su movimiento: no es una pose repetida.
+      expect(grid.map((f) => f[0]).toSet().length, greaterThan(20));
+      expect(grid.first[0], closeTo(0, 1));
+    });
   });
 }
