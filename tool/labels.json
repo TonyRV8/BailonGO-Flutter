@@ -1,0 +1,232 @@
+{
+ "Basico/Abdiel_Basico_5cinco_sobra1": {
+  "score": 50,
+  "src": "revisor 5/10 (nombre del archivo)",
+  "tol": 7
+ },
+ "Basico/Adbiel_Basico_7": {
+  "score": 70,
+  "src": "revisor 7/10 (nombre del archivo)",
+  "tol": 7
+ },
+ "Basico/Gabo_7pordebajo": {
+  "score": 50,
+  "src": "revisor 5/10 (lista por paso)",
+  "tol": 7
+ },
+ "CubanBreak/Abdiel_CubanBreak_4_sobra1": {
+  "score": 40,
+  "src": "revisor 4/10 (nombre del archivo)",
+  "tol": 7
+ },
+ "CubanBreak/Gabo_2porencima_bien": {
+  "score": 40,
+  "src": "revisor 4/10 (lista por paso)",
+  "tol": 7
+ },
+ "CubanBreak/Gabo_bien": {
+  "score": 30,
+  "src": "revisor 3/10 (lista por paso)",
+  "tol": 7
+ },
+ "CubanBreak/Gabo_maso_sitermina": {
+  "score": 40,
+  "src": "banda 3-5/10 (Toto, Primo y sobrantes de Gabo)",
+  "tol": 10
+ },
+ "Cucaracha/Abdiel_Cucaracha_5_sobra1": {
+  "score": 50,
+  "src": "revisor 5/10 (nombre del archivo)",
+  "tol": 7
+ },
+ "Cucaracha/Gabo_SalePocoDeLaToma": {
+  "score": 60,
+  "src": "revisor 6/10 (lista por paso)",
+  "tol": 7
+ },
+ "Cucaracha/Gabo_SalePoquitoDeLaToma": {
+  "score": 40,
+  "src": "revisor 4/10 (lista por paso)",
+  "tol": 7
+ },
+ "CumbiaStep/Abdiel_CumbiaStep_6": {
+  "score": 60,
+  "src": "revisor 6/10 (nombre del archivo)",
+  "tol": 7
+ },
+ "CumbiaStep/Abdiel_CumbiaStep_7_faltan3": {
+  "score": 70,
+  "src": "revisor 7/10 (nombre del archivo)",
+  "tol": 7
+ },
+ "CumbiaStep/Avril_2porencima_bien": {
+  "score": 80,
+  "src": "revisor 8/10",
+  "tol": 7
+ },
+ "CumbiaStep/Gabo_2porencima_termina": {
+  "score": null,
+  "src": "sin etiqueta: su mejor toma del paso es < 3/10",
+  "tol": 0
+ },
+ "CumbiaStep/Gabo_seconfunde_termina": {
+  "score": 20,
+  "src": "revisor 2/10 (lista por paso)",
+  "tol": 7
+ },
+ "CumbiaStep/Toto_incompleto": {
+  "score": 40,
+  "src": "banda 3-5/10 (Toto, Primo y sobrantes de Gabo)",
+  "tol": 10
+ },
+ "GiroPuntaTalon/Abdiel_GiroPuntaTalon_4_faltan3s": {
+  "score": 40,
+  "src": "revisor 4/10 (nombre del archivo)",
+  "tol": 7
+ },
+ "GiroPuntaTalon/Abdiel_GiroPuntaTalon_NADA_11s": {
+  "score": 10,
+  "src": "SUPUESTO: 'NADA' = no ejecutó el paso",
+  "tol": 10
+ },
+ "GiroPuntaTalon/Abdiel_GiroPuntaTalon_NADA_7s": {
+  "score": 10,
+  "src": "SUPUESTO: 'NADA' = no ejecutó el paso",
+  "tol": 10
+ },
+ "GiroPuntaTalon/Gabo_bien": {
+  "score": 40,
+  "src": "revisor 4/10 (lista por paso)",
+  "tol": 7
+ },
+ "GiroPuntaTalon/Gabo_muycorto_6pordebajo": {
+  "score": 40,
+  "src": "banda 3-5/10 (Toto, Primo y sobrantes de Gabo)",
+  "tol": 10
+ },
+ "GiroPuntaTalon/Gabo_muylargo_6demas_muyaladerecha": {
+  "score": 40,
+  "src": "banda 3-5/10 (Toto, Primo y sobrantes de Gabo)",
+  "tol": 10
+ },
+ "Guapeo/Abdiel_Guapeo_6_sobra1": {
+  "score": 60,
+  "src": "revisor 6/10 (nombre del archivo)",
+  "tol": 7
+ },
+ "Guapeo/Gabo_bien": {
+  "score": 30,
+  "src": "revisor 3/10 (lista por paso)",
+  "tol": 7
+ },
+ "Guapeo/Primo_muycorto_notermina": {
+  "score": 40,
+  "src": "banda 3-5/10 (Toto, Primo y sobrantes de Gabo)",
+  "tol": 10
+ },
+ "Guapeo/Primo_muyylargo": {
+  "score": 40,
+  "src": "banda 3-5/10 (Toto, Primo y sobrantes de Gabo)",
+  "tol": 10
+ },
+ "KickFlick/Abdiel_Kickflick_5": {
+  "score": 50,
+  "src": "revisor 5/10 (nombre del archivo)",
+  "tol": 7
+ },
+ "KickFlick/Gabo_bien": {
+  "score": 50,
+  "src": "revisor 5/10 (lista por paso)",
+  "tol": 7
+ },
+ "KickFlick/Gabo_bien_largo": {
+  "score": 40,
+  "src": "banda 3-5/10 (Toto, Primo y sobrantes de Gabo)",
+  "tol": 10
+ },
+ "KickFlick/Gabo_largo_fondopersonas": {
+  "score": 40,
+  "src": "banda 3-5/10 (Toto, Primo y sobrantes de Gabo)",
+  "tol": 10
+ },
+ "RightSpotTurn/Adbiel_RightSpotTurn_4_Invertido": {
+  "score": 40,
+  "src": "revisor 4/10 (nombre del archivo)",
+  "tol": 7
+ },
+ "RightSpotTurn/Adbiel_RightSpotTurn_4_Invertido_sobra1s": {
+  "score": 40,
+  "src": "revisor 4/10 (nombre del archivo)",
+  "tol": 7
+ },
+ "RightSpotTurn/Gabo_AlfinlaSeEquivoca_seestaAdaptando": {
+  "score": null,
+  "src": "sin etiqueta: su mejor toma del paso es < 3/10",
+  "tol": 0
+ },
+ "RightSpotTurn/Gabo_Noterminaestatico": {
+  "score": null,
+  "src": "sin etiqueta: su mejor toma del paso es < 3/10",
+  "tol": 0
+ },
+ "RightSpotTurn/Gabo_bien": {
+  "score": 20,
+  "src": "revisor 2/10 (lista por paso)",
+  "tol": 7
+ },
+ "SuzyQ/Abdiel_SuzyQ_7_sobra1": {
+  "score": 70,
+  "src": "revisor 7/10 (nombre del archivo)",
+  "tol": 7
+ },
+ "SuzyQ/Adbiel_SuzyQ_7_ajustado": {
+  "score": 70,
+  "src": "revisor 7/10 (nombre del archivo)",
+  "tol": 7
+ },
+ "SuzyQ/Avril_SItermina_bien": {
+  "score": 80,
+  "src": "revisor 8/10",
+  "tol": 7
+ },
+ "SuzyQ/Avril_muyylargo_bien": {
+  "score": null,
+  "src": "sin etiqueta: el revisor solo puntuó otra toma suya",
+  "tol": 0
+ },
+ "SuzyQ/Avril_muyyylargo_noacabaestatico_bien": {
+  "score": null,
+  "src": "sin etiqueta: el revisor solo puntuó otra toma suya",
+  "tol": 0
+ },
+ "SuzyQ/Gabo_notermina_9seg": {
+  "score": 40,
+  "src": "banda 3-5/10 (Toto, Primo y sobrantes de Gabo)",
+  "tol": 10
+ },
+ "SuzyQ/Gabo_persona de fondo_termina": {
+  "score": 40,
+  "src": "banda 3-5/10 (Toto, Primo y sobrantes de Gabo)",
+  "tol": 10
+ },
+ "SuzyQ/Gabo_termina": {
+  "score": 40,
+  "src": "banda 3-5/10 (Toto, Primo y sobrantes de Gabo)",
+  "tol": 10
+ },
+ "randoms/baile random": {
+  "score": 8,
+  "src": "baile ajeno al catálogo",
+  "tol": 8
+ },
+ "randoms/baile random2": {
+  "score": 8,
+  "src": "baile ajeno al catálogo",
+  "tol": 8
+ },
+ "randoms/baile random3": {
+  "score": 8,
+  "src": "baile ajeno al catálogo",
+  "tol": 8
+ }
+}

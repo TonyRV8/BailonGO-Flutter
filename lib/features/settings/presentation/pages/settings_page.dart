@@ -264,7 +264,9 @@ class _CalibrateEngineTileState extends ConsumerState<_CalibrateEngineTile> {
           continue;
         }
         // Mismos pesos y parámetros que la evaluación real.
-        final weights = kStepWeights[step.id] ?? step.weights;
+        final weights = kStepWeights.containsKey(step.id)
+            ? weightsForStep(step.id)
+            : step.weights;
         final params = paramsFor(step.id);
         final self = DtwComparator.compare(idealF, idealF,
             weights: weights, params: params);

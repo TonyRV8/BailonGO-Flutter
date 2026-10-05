@@ -60,4 +60,49 @@ void main() {
       }
     });
   });
+
+  group('ajuste por grupo de características', () {
+    test('los grupos parten el vector completo, sin huecos ni solapes', () {
+      final cubiertos = <int>[];
+      for (final g in kFeatureGroups.values) {
+        cubiertos.addAll(g);
+      }
+      cubiertos.sort();
+      expect(cubiertos,
+          List<int>.generate(FeatureExtractor.featureCount, (i) => i));
+    });
+
+    test('cada grupo tiene multiplicador y es positivo o cero', () {
+      for (final g in kFeatureGroups.keys) {
+        expect(kGroupScale[g], isNotNull, reason: g);
+        expect(kGroupScale[g], greaterThanOrEqualTo(0), reason: g);
+      }
+      expect(kGroupScale.length, kFeatureGroups.length);
+    });
+
+    test('los pesos efectivos salen del vector del paso por su grupo', () {
+      for (final id in kRealStepIds) {
+        final base = kStepWeights[id]!;
+        final eff = weightsForStep(id);
+        expect(eff.length, FeatureExtractor.featureCount, reason: id);
+        for (final e in kFeatureGroups.entries) {
+          for (final i in e.value) {
+            expect(eff[i], closeTo(base[i] * kGroupScale[e.key]!, 1e-9),
+                reason: '$id[$i]');
+          }
+        }
+      }
+    });
+
+    test('un paso sin pesos propios devuelve lista vacía', () {
+      expect(weightsForStep('paso_prueba'), isEmpty);
+    });
+
+    test('algún grupo sigue pesando: no se anula la evaluación entera', () {
+      for (final id in kRealStepIds) {
+        expect(weightsForStep(id).reduce((a, b) => a + b), greaterThan(0),
+            reason: id);
+      }
+    });
+  });
 }

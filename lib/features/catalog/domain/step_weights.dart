@@ -217,6 +217,84 @@ const Map<String, List<double>> kStepWeights = {
   'kick_flick': wKickFlick,
 };
 
+/// ─────────────────────────────────────────────────────────────────────────────
+/// AJUSTE POR GRUPO (2026-10-05). Los vectores de arriba son un punto de
+/// partida razonado por biomecánica. Lo que sigue es un multiplicador por
+/// GRUPO de características, común a los nueve pasos y MEDIDO contra el
+/// corpus de tomas etiquetadas (`tool/bench_real.dart --wsweep`). Así la
+/// jerarquía razonada de cada paso se conserva y lo que se calibra es cuánto
+/// vale cada parte del cuerpo en conjunto.
+///
+/// Por qué hizo falta: midiendo el poder discriminante de cada característica
+/// por separado (`--perfeature`, que compara el costo de lo que el revisor
+/// puntuó alto contra lo que puntuó bajo), la orientación y la elevación del
+/// pie —las de mayor peso en Suzy Q y en los dos giros— ordenaban AL REVÉS,
+/// mientras que la posición de las manos, rebajada a 0.05 en una calibración
+/// anterior hecha con alumnos simulados, resultó de las más informativas con
+/// alumnos reales.
+const Map<String, List<int>> kFeatureGroups = {
+  'rodillas': [0, 1, 2, 3],
+  'apertura': [4],
+  'pieAlto': [5, 6],
+  'pieX': [7, 8],
+  'rodillaX': [9, 10],
+  'pieOrient': [11, 12, 13, 14],
+  'brazos': [15, 16],
+  'hombros': [17],
+  'manos': [18, 19, 20, 21],
+  'cadera': [22, 23, 24, 25],
+};
+
+/// Multiplicador por grupo. 1.0 = el peso razonado del paso tal cual.
+/// Obtenido con `dart run tool/bench_real.dart --wsweep`, que en cada
+/// candidato reajusta los dos umbrales de cada paso: pérdida 63.3 -> 58.4
+/// sobre las 110 tomas del corpus, sin tocar los controles (la referencia
+/// contra sí misma sigue en 100, la inmovilidad en 0 y los bailes ajenos
+/// en 15).
+///
+/// Lectura de los valores, contrastada con `--perfeature`:
+///   pieX x2      la posición lateral del tobillo es, tras la apertura del
+///                compás, lo que mejor sigue al revisor
+///   brazos x2    0.05 -> 0.10; aportan poco pero en la dirección correcta,
+///                al revés de lo que sugerían los alumnos simulados
+///   rodillas x0.5 la flexión de la izquierda ordena bien y la de la derecha
+///                al revés, así que en conjunto informan poco
+///   hombros x0.1 su inclinación resultó casi muda entre alumnos reales
+///
+/// AVISO: son 25 tomas con nota directa del revisor, así que estos valores
+/// describen este corpus. El de hombros contradice la biomecánica del guapeo
+/// (donde el acento de hombro es parte del paso) y conviene revisarlo si el
+/// corpus crece.
+const Map<String, double> kGroupScale = {
+  'rodillas': 0.5,
+  'apertura': 1.0,
+  'pieAlto': 1.0,
+  'pieX': 2.0,
+  'rodillaX': 1.0,
+  'pieOrient': 1.0,
+  'brazos': 2.0,
+  'hombros': 0.1,
+  'manos': 1.0,
+  'cadera': 1.0,
+};
+
+/// Pesos efectivos del paso: su vector razonado por el multiplicador de cada
+/// grupo. Es lo que debe usar todo el que compare, para que el banco de
+/// calibración y la aplicación ponderen igual.
+List<double> weightsForStep(String pasoId) {
+  final base = kStepWeights[pasoId];
+  if (base == null) return const [];
+  final out = List<double>.from(base);
+  for (final e in kFeatureGroups.entries) {
+    final m = kGroupScale[e.key] ?? 1.0;
+    if (m == 1.0) continue;
+    for (final i in e.value) {
+      if (i < out.length) out[i] = base[i] * m;
+    }
+  }
+  return out;
+}
+
 /// Orden canónico de los 9 pasos reales (= campo `orden` del catálogo).
 const List<String> kRealStepIds = [
   'basico_adelante_atras',

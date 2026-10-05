@@ -488,8 +488,11 @@ class _EvaluationPageState extends ConsumerState<EvaluationPage>
       user,
       _refFrames,
       // Pesos del código para los pasos reales: el documento de Firestore
-      // puede ser de una siembra anterior (22 features, brazos a 0).
-      weights: kStepWeights[widget.stepId] ?? _step?.weights,
+      // puede ser de una siembra anterior (22 features, brazos a 0). Van ya
+      // con el ajuste por grupo (`weightsForStep`).
+      weights: kStepWeights.containsKey(widget.stepId)
+          ? weightsForStep(widget.stepId)
+          : _step?.weights,
       params: paramsFor(widget.stepId),
     );
 

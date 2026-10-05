@@ -1,5 +1,13 @@
 /// Banco de ESCENARIOS del motor de evaluación (implementar_pasos.txt §7-quater).
 ///
+/// AVISO (2026-10-05): desde §7-octies la CALIBRACIÓN se hace en
+/// `tool/bench_real.dart`, con grabaciones de alumnos y notas de un revisor.
+/// Este banco se conserva como control de ROBUSTEZ —inmovilidad, pararse a la
+/// mitad, otro paso, lateralidad invertida, cámara ruidosa, fps irregulares—
+/// y su `loss` NO es comparable con el de aquel: aquí la toma regular se
+/// estira al tempo de la referencia y se le añade ruido simulado, así que no
+/// alcanza la nota que el revisor le dio en el video original.
+///
 /// `calibrate.dart` solo tenía dos puntos por paso (ideal contra sí mismo y la
 /// toma de 5/10). Con eso la escala quedaba sin forma y sin controles: se
 /// aprobaba al que se quedaba quieto y se castigaba al que bailaba bien pero
@@ -407,7 +415,7 @@ List<Row> score(List<Case> cases, ParamsFor paramsOf) => [
           c.step,
           c.scenario,
           DtwComparator.compare(c.user, c.ref,
-              weights: kStepWeights[c.step], params: paramsOf(c.step)),
+              weights: weightsForStep(c.step), params: paramsOf(c.step)),
         ),
     ];
 
@@ -643,7 +651,7 @@ void printSnr(List<Case> cases, {bool perFeature = false}) {
     final bad = cases.firstWhere((c) => c.step == st && c.scenario.name == 'malo');
     final r = prep(still.ref), u = prep(still.user), g = prep(good.user), b = prep(bad.user);
     stdout.writeln('\n$st   (ampRef / ruidoQuieto / ampBuenoVivo / ampMalo   peso)');
-    final w = kStepWeights[st]!;
+    final w = weightsForStep(st);
     for (var c = 0; c < FeatureExtractor.featureCount; c++) {
       final ar = stdOf(r, c, 30), an = stdOf(u, c, 30), ag = stdOf(g, c, 30), ab = stdOf(b, c, 30);
       stdout.writeln('  ${c.toString().padLeft(2)} ${ar.toStringAsFixed(3).padLeft(7)} ${an.toStringAsFixed(3).padLeft(7)} '

@@ -2,13 +2,20 @@
 ///
 /// `bench.dart` fabricaba al alumno a partir de la propia profesora. Este banco
 /// usa grabaciones de alumnos reales (BailonGObailes/BailesREVISADOS, extraídas
-/// con `tool/extract_revisados.py`) con la nota que les dio la revisión humana:
+/// con `tool/extract_revisados.py`) con la nota que les dio la revisión humana.
 ///
-///   ideal vs sí misma ............ 100
-///   toma "regular" de la profesora  70-80   (antes se etiquetó 50; revisada)
-///   alumnos (Gabo, Primo, Toto) ... 40-50
-///   alumna Avril .................. alta en alineación pero < 90 → 70-85
-///   randoms (otro baile) .......... muy baja, contra las 9 referencias
+/// Las notas por toma viven en `tool/labels.json` (lo genera y documenta
+/// `tool/build_labels.py`, y se puede editar a mano). Cubren de 2/10 a 8/10,
+/// así que desde la segunda vuelta (2026-10-05) la escala tiene puntos de
+/// anclaje en todo el rango y no solo abajo. Una toma con `score: null` se
+/// evalúa y se imprime pero NO cuenta en la pérdida.
+///
+/// Lo que sigue en código, por ser estructural y no juicio humano:
+///   ideal vs sí misma ... 100   control de consistencia del motor
+///   toma regular ........  75   la "imperfecta" de la profesora (7-8/10)
+///   quieto ..............   0   no moverse
+///   desfase .............  92   la referencia retrasada 330 ms
+///   lento10 .............  85   la referencia un 10 % más lenta
 ///
 /// Cada toma se procesa EXACTAMENTE como la app procesa una captura: features
 /// con corrección de aspecto, rejilla de 33 ms y ventana = duración de la
@@ -51,19 +58,61 @@ const folderToStep = {
 };
 
 class Label {
-  const Label(this.name, this.target, this.tol, {this.weight = 1});
+  const Label(this.name, this.target, this.tol,
+      {this.weight = 1, this.scored = true, this.direct = false});
   final String name;
+
+  /// Nota humana (0-100) y margen sin castigo. Con [scored] en falso la toma
+  /// se evalúa y se imprime, pero no entra en la pérdida: no hay etiqueta.
   final double target, tol, weight;
+  final bool scored;
+
+  /// La nota viene del revisor para ESA toma, no de una banda supuesta. Es el
+  /// único subconjunto con el que tiene sentido medir si el motor ordena como
+  /// una persona.
+  final bool direct;
 }
 
 const lblSelf = Label('ideal', 100, 3, weight: 1);
 const lblRegular = Label('regular', 75, 5, weight: 2);
-const lblStudent = Label('alumno', 45, 5, weight: 3);
-const lblAvril = Label('avril', 75, 8, weight: 2);
 const lblStill = Label('quieto', 0, 5, weight: 2);
 const lblShift = Label('desfase', 92, 6, weight: 1);
 const lblSlow = Label('lento10', 85, 10, weight: 1);
-const lblRandom = Label('random', 8, 8, weight: 2);
+
+/// Notas de `tool/labels.json`, por clave "<Carpeta>/<archivo sin extensión>".
+Map<String, Label> loadLabels(String path) {
+  final raw = jsonDecode(File(path).readAsStringSync()) as Map<String, dynamic>;
+  final out = <String, Label>{};
+  for (final e in raw.entries) {
+    final v = e.value as Map<String, dynamic>;
+    final score = (v['score'] as num?)?.toDouble();
+    final folder = e.key.split('/').first;
+    final file = e.key.split('/').last.toLowerCase();
+    // El nombre del grupo solo sirve para agregar en la tabla resumen.
+    final who = folder == 'randoms'
+        ? 'ajeno'
+        : file.startsWith('abdiel') || file.startsWith('adbiel')
+            ? 'abdiel'
+            : file.startsWith('avril')
+                ? 'avril'
+                : file.startsWith('gabo')
+                    ? 'gabo'
+                    : file.startsWith('primo')
+                        ? 'primo'
+                        : file.startsWith('toto')
+                            ? 'toto'
+                            : 'otro';
+    out[e.key] = Label(
+      who,
+      score ?? 0,
+      (v['tol'] as num?)?.toDouble() ?? 7,
+      weight: score == null ? 0 : 2,
+      scored: score != null,
+      direct: (v['src'] as String? ?? '').contains('revisor'),
+    );
+  }
+  return out;
+}
 
 class Take {
   Take(this.key, this.frames, this.aspect);
@@ -128,6 +177,7 @@ Map<String, Take> loadTakes(String path) {
 }
 
 List<RealCase> buildCases(Map<String, Take> prof, Map<String, Take> real,
+    Map<String, Label> labels,
     {bool mirror = false, Set<String>? only}) {
   final cases = <RealCase>[];
   final refs = <String, List<List<double>>>{};
@@ -161,13 +211,12 @@ List<RealCase> buildCases(Map<String, Take> prof, Map<String, Take> real,
   }
   for (final e in real.entries) {
     final folder = e.key.split('/').first;
-    final file = e.key.split('/').last;
     if (folder == 'randoms') {
       for (final id in refs.keys) {
         cases.add(RealCase(
             id,
             e.value,
-            lblRandom,
+            labels[e.key]!,
             align(featuresOf(e.value, durationMs: refs[id]!.length * 33),
                 refs[id]!, id),
             refs[id]!));
@@ -176,7 +225,12 @@ List<RealCase> buildCases(Map<String, Take> prof, Map<String, Take> real,
     }
     final id = folderToStep[folder];
     if (id == null || !refs.containsKey(id)) continue;
-    final label = file.startsWith('Avril') ? lblAvril : lblStudent;
+    final label = labels[e.key];
+    if (label == null) {
+      stderr.writeln('!! sin etiqueta en labels.json: ${e.key} '
+          '(corre: python tool/build_labels.py)');
+      continue;
+    }
     cases.add(RealCase(
         id,
         e.value,
@@ -239,9 +293,28 @@ List<List<double>> align(
   return best;
 }
 
+/// Multiplicador por GRUPO de características, común a los nueve pasos. Se
+/// aplica encima de `kStepWeights`, así que la jerarquía razonada por paso se
+/// conserva y lo que se ajusta es cuánto vale cada parte del cuerpo en
+/// conjunto. `--wsweep` lo busca contra el corpus etiquetado.
+const featureGroups = kFeatureGroups;
+Map<String, double> groupMul = Map<String, double>.from(kGroupScale);
+
+List<double> weightsFor(String step) {
+  final base = kStepWeights[step]!;
+  final out = List<double>.from(base);
+  for (final e in featureGroups.entries) {
+    final m = groupMul[e.key] ?? 1.0;
+    for (final i in e.value) {
+      out[i] = base[i] * m;
+    }
+  }
+  return out;
+}
+
 DtwResult scoreCase(RealCase c, DtwParams p) => DtwComparator.compare(
     c.user, c.ref,
-    weights: kStepWeights[c.step], params: p);
+    weights: weightsFor(c.step), params: p);
 
 /// Nota final de un resultado ya calculado si la curva de alineación fuera
 /// [p] (floor / max / power). Replica exactamente el cierre de
@@ -266,6 +339,7 @@ int rescore(DtwResult r, DtwParams p) {
 double lossOfResults(List<(RealCase, DtwResult)> rs, DtwParams p) {
   var sum = 0.0, wsum = 0.0;
   for (final (c, r) in rs) {
+    if (!c.label.scored) continue;
     final err = (rescore(r, p) - c.label.target).abs() - c.label.tol;
     if (err > 0) sum += c.label.weight * err * err;
     wsum += c.label.weight;
@@ -276,6 +350,7 @@ double lossOfResults(List<(RealCase, DtwResult)> rs, DtwParams p) {
 double lossOf(List<RealCase> cases, ParamsFor pf) {
   var sum = 0.0, wsum = 0.0;
   for (final c in cases) {
+    if (!c.label.scored) continue;
     final s = scoreCase(c, pf(c.step)).score;
     final err = (s - c.label.target).abs() - c.label.tol;
     if (err > 0) sum += c.label.weight * err * err;
@@ -287,6 +362,7 @@ double lossOf(List<RealCase> cases, ParamsFor pf) {
 void printTable(List<RealCase> cases, ParamsFor pf, {bool detail = false}) {
   String? lastStep;
   var inBand = 0, total = 0;
+  final humano = <double>[], motor = <double>[];
   final perLabel = <String, List<double>>{};
   final perLabelRel = <String, List<double>>{};
   final perLabelAli = <String, List<double>>{};
@@ -299,9 +375,13 @@ void printTable(List<RealCase> cases, ParamsFor pf, {bool detail = false}) {
       lastStep = c.step;
     }
     final r = scoreCase(c, pf(c.step));
-    final ok = (r.score - c.label.target).abs() <= c.label.tol;
-    if (ok) inBand++;
-    total++;
+    final ok = c.label.scored && (r.score - c.label.target).abs() <= c.label.tol;
+    if (c.label.scored) {
+      if (ok) inBand++;
+      total++;
+      humano.add(c.label.target);
+      motor.add(r.score.toDouble());
+    }
     perLabel.putIfAbsent(c.label.name, () => []).add(r.score.toDouble());
     perLabelRel.putIfAbsent(c.label.name, () => []).add(r.relativeCost);
     perLabelAli.putIfAbsent(c.label.name, () => []).add(r.alignmentScore.toDouble());
@@ -311,15 +391,18 @@ void printTable(List<RealCase> cases, ParamsFor pf, {bool detail = false}) {
             '  ali/seg ${r.segmentAlignment} rit/seg ${r.segmentRhythm}'
         : '';
     stdout.writeln('  ${c.name.padRight(46)} ${c.label.name.padRight(8)} '
-        '${c.label.target.round().toString().padLeft(3)}  '
+        '${c.label.scored ? c.label.target.round().toString().padLeft(3) : '  -'}  '
         '${r.score.toString().padLeft(4)}${ok ? ' ' : '!'} '
         '${r.alignmentScore.toString().padLeft(3)}  '
         '${r.rhythmScore.toString().padLeft(3)}  '
         '${r.relativeCost.toStringAsFixed(2)} ${r.coverage.toStringAsFixed(2)} '
         '${r.mirrorFactor.toStringAsFixed(2)} ${r.pathDeviation.toStringAsFixed(3)} ${r.segmentScore}$extra');
   }
-  stdout.writeln(
-      '\nen banda $inBand/$total   loss ${lossOf(cases, pf).toStringAsFixed(1)}');
+  stdout.writeln('\nen banda $inBand/$total   '
+      'loss ${lossOf(cases, pf).toStringAsFixed(1)}   '
+      'r ${_pearson(motor, humano).toStringAsFixed(2)}   '
+      'rho ${_spearman(motor, humano).toStringAsFixed(2)}   '
+      'error medio ${_mae(motor, humano).toStringAsFixed(1)}');
   for (final e in perLabel.entries) {
     final xs = e.value..sort();
     final mean = xs.reduce((a, b) => a + b) / xs.length;
@@ -332,6 +415,184 @@ void printTable(List<RealCase> cases, ParamsFor pf, {bool detail = false}) {
         '  rit ${avg(perLabelRit[e.key]!).toStringAsFixed(0).padLeft(3)}'
         '   rel media ${avg(rel).toStringAsFixed(2)} [${rel.first.toStringAsFixed(2)}-${rel.last.toStringAsFixed(2)}]');
   }
+}
+
+/// --wsweep: busca el multiplicador de cada grupo de características que
+/// mejor reproduce el juicio humano. En cada candidato se reajustan los dos
+/// umbrales de cada paso, que es lo que de verdad iría a producción.
+void weightSweep(List<RealCase> cases, DtwParams base) {
+  double evalMul() {
+    final cache = {for (final c in cases) c: scoreCase(c, base)};
+    final fitted = fitPerStep(cases, base, step: 0.04, cache: cache);
+    var sum = 0.0, wsum = 0.0;
+    for (final c in cases) {
+      if (!c.label.scored) continue;
+      final p = fitted[c.step] ?? base;
+      final err = (rescore(cache[c]!, p) - c.label.target).abs() - c.label.tol;
+      if (err > 0) sum += c.label.weight * err * err;
+      wsum += c.label.weight;
+    }
+    return sum / wsum;
+  }
+
+  final best = Map<String, double>.from(groupMul);
+  var bestLoss = evalMul();
+  stdout.writeln('inicio loss ${bestLoss.toStringAsFixed(1)}');
+  const vals = [0.0, 0.1, 0.25, 0.5, 1.0, 2.0, 4.0];
+  for (var round = 0; round < 3; round++) {
+    var improved = false;
+    for (final g in featureGroups.keys) {
+      final keep = best[g]!;
+      var bestV = keep;
+      for (final v in vals) {
+        groupMul = Map<String, double>.from(best)..[g] = v;
+        final l = evalMul();
+        if (l < bestLoss - 1e-6) {
+          bestLoss = l;
+          bestV = v;
+          improved = true;
+        }
+      }
+      best[g] = bestV;
+      groupMul = Map<String, double>.from(best);
+      if (bestV != keep) {
+        stdout.writeln('  ${g.padRight(10)} x$bestV -> loss '
+            '${bestLoss.toStringAsFixed(1)}');
+      }
+    }
+    if (!improved) break;
+  }
+  groupMul = best;
+  stdout.writeln('\n// multiplicador por grupo');
+  for (final e in best.entries) {
+    stdout.writeln('  ${e.key}: ${e.value},');
+  }
+  printSep(cases, (_) => base, 'con esos pesos');
+  fit(cases, base);
+}
+
+/// --perfeature: poder discriminante de CADA característica por separado.
+/// Para cada una se evalúa el corpus con esa sola característica activa y se
+/// compara el costo medio de lo que el revisor puntuó alto contra lo que
+/// puntuó bajo. Positivo = esa característica ordena como la persona.
+void printPerFeature(List<RealCase> cases, DtwParams base) {
+  stdout.writeln('  #  característica                              '
+      'alto   bajo    separación');
+  final rank = <(double, String)>[];
+  for (var c = 0; c < FeatureExtractor.featureCount; c++) {
+    final w = List<double>.filled(FeatureExtractor.featureCount, 0)..[c] = 1;
+    final alto = <double>[], bajo = <double>[];
+    for (final cs in cases) {
+      if (!cs.label.direct) continue;
+      final r = DtwComparator.compare(cs.user, cs.ref, weights: w, params: base);
+      if (!r.relativeCost.isFinite) continue;
+      (cs.label.target >= 60 ? alto : cs.label.target <= 30 ? bajo : <double>[])
+          .add(r.relativeCost);
+    }
+    if (alto.isEmpty || bajo.isEmpty) continue;
+    double m(List<double> x) => x.reduce((a, b) => a + b) / x.length;
+    final d = m(bajo) - m(alto);
+    final line = '${c.toString().padLeft(3)}  '
+        '${DtwResult.componentNames[c].padRight(42)}'
+        '${m(alto).toStringAsFixed(2).padLeft(5)}  '
+        '${m(bajo).toStringAsFixed(2).padLeft(5)}   '
+        '${d >= 0 ? '+' : ''}${d.toStringAsFixed(3)}';
+    rank.add((d, line));
+  }
+  rank.sort((a, b) => b.$1.compareTo(a.$1));
+  for (final r in rank) {
+    stdout.writeln(r.$2);
+  }
+}
+
+/// --sep: ¿separa el motor lo que el revisor puntuó alto de lo que puntuó
+/// bajo? Solo cuenta las tomas con nota directa del revisor. Si el costo
+/// medio del grupo alto no queda claramente por debajo del grupo bajo, ningún
+/// ajuste de la curva puede ordenarlos: el problema es la representación.
+void printSep(List<RealCase> cases, ParamsFor pf, String tag) {
+  final alto = <double>[], bajo = <double>[];
+  final altoN = <double>[], bajoN = <double>[];
+  for (final c in cases) {
+    if (!c.label.direct) continue;
+    final r = scoreCase(c, pf(c.step));
+    if (c.label.target >= 60) {
+      alto.add(r.relativeCost);
+      altoN.add(r.score.toDouble());
+    } else if (c.label.target <= 30) {
+      bajo.add(r.relativeCost);
+      bajoN.add(r.score.toDouble());
+    }
+  }
+  double m(List<double> x) => x.reduce((a, b) => a + b) / x.length;
+  final d = m(bajo) - m(alto); // positivo = el motor acierta el orden
+  stdout.writeln('${tag.padRight(34)} '
+      'alto n=${alto.length} coste ${m(alto).toStringAsFixed(3)} nota ${m(altoN).toStringAsFixed(0)}  |  '
+      'bajo n=${bajo.length} coste ${m(bajo).toStringAsFixed(3)} nota ${m(bajoN).toStringAsFixed(0)}  |  '
+      'separación ${d >= 0 ? '+' : ''}${d.toStringAsFixed(3)}');
+}
+
+/// --csv: una línea por toma, para analizar fuera (acuerdo por bailarín, por
+/// paso, sesgos...). Las tomas sin etiqueta salen con humano vacío.
+void printCsv(List<RealCase> cases, ParamsFor pf) {
+  stdout.writeln('paso,grupo,toma,humano,nota,ali,rit,rel,cov,mir');
+  for (final c in cases) {
+    final r = scoreCase(c, pf(c.step));
+    final h = c.label.scored ? c.label.target.round().toString() : '';
+    stdout.writeln('${c.step},${c.label.name},"${c.name}",$h,${r.score},'
+        '${r.alignmentScore},${r.rhythmScore},'
+        '${r.relativeCost.toStringAsFixed(4)},'
+        '${r.coverage.toStringAsFixed(4)},'
+        '${r.mirrorFactor.toStringAsFixed(4)}');
+  }
+}
+
+/// Acuerdo con el juicio humano sobre las tomas etiquetadas. `r` mide si la
+/// nota del motor sigue a la del revisor; `rho` (Spearman) si al menos las
+/// ORDENA igual, que es lo que de verdad le importa al alumno.
+double _pearson(List<double> a, List<double> b) {
+  if (a.length < 2) return 0;
+  final ma = a.reduce((x, y) => x + y) / a.length;
+  final mb = b.reduce((x, y) => x + y) / b.length;
+  var sab = 0.0, saa = 0.0, sbb = 0.0;
+  for (var i = 0; i < a.length; i++) {
+    final da = a[i] - ma, db = b[i] - mb;
+    sab += da * db;
+    saa += da * da;
+    sbb += db * db;
+  }
+  if (saa <= 1e-12 || sbb <= 1e-12) return 0;
+  return sab / math.sqrt(saa * sbb);
+}
+
+List<double> _ranks(List<double> x) {
+  final idx = List<int>.generate(x.length, (i) => i)
+    ..sort((i, j) => x[i].compareTo(x[j]));
+  final out = List<double>.filled(x.length, 0);
+  var i = 0;
+  while (i < idx.length) {
+    var j = i;
+    while (j + 1 < idx.length && x[idx[j + 1]] == x[idx[i]]) {
+      j++;
+    }
+    final r = (i + j) / 2 + 1;
+    for (var k = i; k <= j; k++) {
+      out[idx[k]] = r;
+    }
+    i = j + 1;
+  }
+  return out;
+}
+
+double _spearman(List<double> a, List<double> b) =>
+    a.length < 2 ? 0 : _pearson(_ranks(a), _ranks(b));
+
+double _mae(List<double> a, List<double> b) {
+  if (a.isEmpty) return 0;
+  var s = 0.0;
+  for (var i = 0; i < a.length; i++) {
+    s += (a[i] - b[i]).abs();
+  }
+  return s / a.length;
 }
 
 /// --fit: por paso, floor y max que minimizan la pérdida de SUS tomas. El DTW
@@ -516,9 +777,14 @@ void printFeatures(List<RealCase> cases, ParamsFor pf) {
   }
 
   for (final c in cases) {
-    if (c.label == lblSelf || c.label == lblStill || c.label == lblShift || c.label == lblSlow) continue;
+    if (c.label == lblSelf ||
+        c.label == lblStill ||
+        c.label == lblShift ||
+        c.label == lblSlow) {
+      continue;
+    }
     final r = scoreCase(c, pf(c.step));
-    final w = kStepWeights[c.step]!;
+    final w = weightsFor(c.step);
     stdout.writeln('\n${c.step} / ${c.name} [${c.label.name}] nota ${r.score} '
         'ali ${r.alignmentScore} rit ${r.rhythmScore} rel ${r.relativeCost.toStringAsFixed(2)}');
     final idx = List<int>.generate(r.componentErrors.length, (i) => i)
@@ -546,8 +812,9 @@ void main(List<String> args) {
   }
   final stepArg = args.where((a) => a.startsWith('--step=')).toList();
   final only = stepArg.isEmpty ? null : {stepArg.first.substring(7)};
-  final cases =
-      buildCases(prof, real, mirror: args.contains('--mirror'), only: only);
+  final labels = loadLabels('tool/labels.json');
+  final cases = buildCases(prof, real, labels,
+      mirror: args.contains('--mirror'), only: only);
   double? num(String flag) {
     final a = args.where((e) => e.startsWith('--$flag=')).toList();
     return a.isEmpty ? null : double.parse(a.first.split('=')[1]);
@@ -572,11 +839,24 @@ void main(List<String> args) {
         amplitudeNoiseMul: num('ampN'),
         smoothWindow: inum('smooth'),
         amplitudeNormalize: args.contains('--noamp') ? false : null,
-        userAmplitudeNormalize: args.contains('--uamp') ? true : null,
+        userAmplitudeNormalize: args.contains('--nouamp') ? false : null,
         centerFeatures: args.contains('--nocenter') ? false : null,
       );
   final base = override(DtwParams.defaults);
   stdout.writeln('casos: ${cases.length}');
+  if (args.contains('--wsweep')) {
+    return weightSweep(cases, base);
+  }
+  if (args.contains('--perfeature')) {
+    return printPerFeature(cases, base);
+  }
+  if (args.contains('--sep')) {
+    return printSep(cases, (_) => base, args.join(' ').replaceAll('--sep', '').trim());
+  }
+  if (args.contains('--csv')) {
+    return printCsv(cases,
+        args.contains('--global') ? (_) => base : (id) => override(paramsFor(id)));
+  }
   if (args.contains('--features')) {
     return printFeatures(cases, args.contains('--global') ? (_) => base : (id) => override(paramsFor(id)));
   }
