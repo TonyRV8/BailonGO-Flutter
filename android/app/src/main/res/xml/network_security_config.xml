@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- El visor 3D (model_viewer_plus) sirve el .glb y <model-viewer> desde un
+     servidor HTTP efímero en 127.0.0.1. Solo se permite texto plano hacia el
+     propio dispositivo; el resto del tráfico sigue exigiendo HTTPS. -->
+<network-security-config>
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="false">127.0.0.1</domain>
+        <domain includeSubdomains="false">localhost</domain>
+    </domain-config>
+</network-security-config>

@@ -7,6 +7,8 @@ import 'package:video_player/video_player.dart';
 import '../../../../core/router/app_router.dart';
 import '../../../../core/router/app_routes.dart';
 import '../../../evaluation/presentation/widgets/reset_progress.dart';
+import '../../../viewer3d/domain/step_animations.dart';
+import '../../../viewer3d/presentation/pages/step_3d_page.dart';
 import '../providers/catalog_providers.dart';
 
 /// Ficha de un paso (RF-06): nombre, descripción, mejor precisión histórica y
@@ -73,6 +75,18 @@ class StepDetailPage extends ConsumerWidget {
           const SizedBox(height: 4),
           Text(step.descripcion, style: theme.textTheme.bodyMedium),
           const SizedBox(height: 24),
+          // Maniquí 3D del paso. Ruta imperativa (sin go_router) para que solo
+          // se llegue desde aquí; el video guía se pausa mientras está encima.
+          if (StepAnimations.forStep(step.id) != null) ...[
+            FilledButton.tonalIcon(
+              onPressed: () => Navigator.of(context).push(
+                Step3DPage.route(step: step.id, title: step.nombre),
+              ),
+              icon: const Icon(Icons.view_in_ar),
+              label: const Text('Ver en 3D'),
+            ),
+            const SizedBox(height: 8),
+          ],
           // Cámara + pose (Fase 3): preview espejo y esqueleto.
           FilledButton.tonalIcon(
             onPressed: () => context.push('${AppRoutes.pose}/${step.id}'),

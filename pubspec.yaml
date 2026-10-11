@@ -38,11 +38,16 @@ dependencies:
   # Sonido del conteo previo a la captura (RF-08)
   audioplayers: ^6.1.0
 
+  # Visor 3D del paso (.glb con animaciones) sobre <model-viewer> en WebView.
+  model_viewer_plus: ^1.10.0
+  webview_flutter: ^4.14.1
+
   # Fases posteriores (se activan al llegar a su fase):
   # hive: ^2.2.3
   # hive_flutter: ^1.1.0
   # fl_chart: ^0.69.0
-
+dependency_overrides:
+  camera_android_camerax: ^0.7.4+7
 dev_dependencies:
   flutter_test:
     sdk: flutter
@@ -55,3 +60,4 @@ flutter:
     - assets/fixtures/ # ref/good/bad.mov para validar el motor (dev)
     - assets/sounds/
     - assets/references/ # landmarks de las tomas ideales (tool/build_references.py)
+    - assets/models/ # bailarin.glb: maniquí 3D con una animación por paso
