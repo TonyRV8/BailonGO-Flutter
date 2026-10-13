@@ -12,5 +12,9 @@ import UIKit
 
   func didInitializeImplicitFlutterEngine(_ engineBridge: FlutterImplicitEngineBridge) {
     GeneratedPluginRegistrant.register(with: engineBridge.pluginRegistry)
+    // Canal `bailongo/pose` (MediaPipe), equivalente a MainActivity.kt.
+    if let registrar = engineBridge.pluginRegistry.registrar(forPlugin: "PoseChannel") {
+      PoseChannel.register(with: registrar)
+    }
   }
 }

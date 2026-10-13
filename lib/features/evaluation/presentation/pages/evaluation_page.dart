@@ -294,6 +294,7 @@ class _EvaluationPageState extends ConsumerState<EvaluationPage>
             width: data.width,
             height: data.height,
             rotationDegrees: data.rotationDegrees,
+            mirrored: data.mirrored,
           );
       // `capturing` y `token` descartan las imágenes que empezaron a
       // procesarse fuera de ESTA captura (ver [_captureToken]).

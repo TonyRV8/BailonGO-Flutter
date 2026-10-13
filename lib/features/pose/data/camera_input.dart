@@ -19,19 +19,25 @@ class CameraFrameData {
     required this.width,
     required this.height,
     required this.rotationDegrees,
+    this.mirrored = false,
   });
 
   final Uint8List nv21;
   final int width;
   final int height;
   final int rotationDegrees;
+
+  /// La imagen viene espejada horizontalmente (cámara frontal en iOS) y el
+  /// nativo debe des-espejarla para que coincida con Android.
+  final bool mirrored;
 }
 
 /// Extrae los bytes NV21 de un [CameraImage] y calcula la rotación según el
 /// sensor y la orientación del dispositivo. Devuelve `null` si el formato no es
 /// NV21 de un solo plano.
 ///
-/// Requiere inicializar la cámara con `ImageFormatGroup.nv21` (Android).
+/// Requiere inicializar la cámara con `ImageFormatGroup.nv21` (Android). En iOS
+/// llega BGRA (`ImageFormatGroup.bgra8888`) y se reenvía tal cual.
 CameraFrameData? cameraFrameFromImage({
   required CameraImage image,
   required CameraDescription camera,
@@ -41,8 +47,13 @@ CameraFrameData? cameraFrameFromImage({
 
   final sensorOrientation = camera.sensorOrientation;
   final int rotation;
+  var mirrored = false;
   if (Platform.isIOS) {
-    rotation = sensorOrientation;
+    // camera_avfoundation ya aplica la orientación del dispositivo al stream
+    // (videoOrientation) y espeja la cámara frontal (isVideoMirrored): el
+    // fotograma llega derecho, solo falta deshacer el espejo.
+    rotation = 0;
+    mirrored = camera.lensDirection == CameraLensDirection.front;
   } else {
     final compensation = _orientations[deviceOrientation];
     if (compensation == null) return null;
@@ -56,5 +67,6 @@ CameraFrameData? cameraFrameFromImage({
     width: image.width,
     height: image.height,
     rotationDegrees: rotation,
+    mirrored: mirrored,
   );
 }

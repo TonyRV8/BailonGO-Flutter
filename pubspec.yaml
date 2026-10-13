@@ -55,6 +55,9 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+  # iOS usa CocoaPods: MediaPipeTasksVision solo se distribuye como pod.
+  config:
+    enable-swift-package-manager: false
   assets:
     - assets/videos/
     - assets/fixtures/ # ref/good/bad.mov para validar el motor (dev)

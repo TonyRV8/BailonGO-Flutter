@@ -102,6 +102,7 @@ class _PosePageState extends ConsumerState<PosePage>
             width: data.width,
             height: data.height,
             rotationDegrees: data.rotationDegrees,
+            mirrored: data.mirrored,
           );
       _evaluateConfidence(frame);
       if (mounted) _frames.value = frame;

@@ -7,7 +7,8 @@ import '../domain/entities/pose_landmark.dart';
 import '../domain/pose_landmarker.dart';
 
 /// Implementación de [PoseLandmarker] sobre MediaPipe Tasks Vision a través de
-/// un platform channel (ver `MainActivity.kt`). El nativo recibe NV21, corre
+/// un platform channel (ver `MainActivity.kt` y `PoseChannel.swift`). El nativo
+/// recibe NV21 (Android) o BGRA (iOS), corre
 /// el modelo `pose_landmarker_lite.task` y devuelve un arreglo plano
 /// [x, y, z, visibility] por cada uno de los 33 landmarks.
 class MediaPipePoseLandmarker implements PoseLandmarker {
@@ -28,6 +29,7 @@ class MediaPipePoseLandmarker implements PoseLandmarker {
     required int width,
     required int height,
     required int rotationDegrees,
+    bool mirrored = false,
   }) async {
     // El nativo devuelve un DoubleArray, que el codec estándar entrega como
     // Float64List: sin envolver 132 Double por fotograma.
@@ -36,6 +38,7 @@ class MediaPipePoseLandmarker implements PoseLandmarker {
       'width': width,
       'height': height,
       'rotation': rotationDegrees,
+      'mirrored': mirrored,
     });
     if (raw == null || raw.isEmpty) return PoseFrame.empty;
 

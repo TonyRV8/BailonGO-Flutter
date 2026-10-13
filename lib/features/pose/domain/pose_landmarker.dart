@@ -12,12 +12,14 @@ abstract class PoseLandmarker {
 
   /// Procesa un fotograma NV21 y devuelve sus landmarks (vacío si no hay
   /// cuerpo). [rotationDegrees] es la rotación necesaria para enderezar la
-  /// imagen (0/90/180/270).
+  /// imagen (0/90/180/270). [mirrored] indica que la imagen viene espejada y
+  /// debe des-espejarse antes de detectar.
   Future<PoseFrame> detect({
     required Uint8List nv21,
     required int width,
     required int height,
     required int rotationDegrees,
+    bool mirrored = false,
   });
 
   /// Libera el detector nativo.
