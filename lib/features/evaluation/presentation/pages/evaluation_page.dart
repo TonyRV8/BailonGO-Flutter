@@ -142,6 +142,22 @@ class _EvaluationPageState extends ConsumerState<EvaluationPage>
   /// Solo los pasos reales van sobre ese tema; los de prueba usan otro video.
   bool get _hasMusic => kRealStepIds.contains(widget.stepId);
 
+  // Voz guía (conteo + instrucciones) que suena a la vez que la música. Cada
+  // pista está grabada sobre `musica_intento.m4a` desde su segundo 0, así que
+  // ambas arrancan juntas en el ¡YA!. Los pasos sin entrada aquí van solo con
+  // música.
+  static const Map<String, String> _voiceGuides = {
+    'cucaracha': 'sounds/audio_guia_cucaracha.mp3',
+  };
+  final AudioPlayer _voicePlayer = AudioPlayer(playerId: 'step_voice');
+
+  AssetSource? get _voiceGuide {
+    final path = _voiceGuides[widget.stepId];
+    return path == null ? null : AssetSource(path);
+  }
+
+  bool get _hasVoice => _voiceGuides.containsKey(widget.stepId);
+
   // Pulso de entrada de cada numero del conteo.
   late final AnimationController _pulse;
 
@@ -171,9 +187,16 @@ class _EvaluationPageState extends ConsumerState<EvaluationPage>
         // Precarga para que el primer pitido no llegue tarde.
         await e.key.setSource(e.value);
       }
+      // Mezcla fija: con voz guía la música baja para dejarle sitio.
       await _musicPlayer.setReleaseMode(ReleaseMode.stop);
-      await _musicPlayer.setVolume(1);
+      await _musicPlayer.setVolume(_hasVoice
+          ? AppConstants.musicUnderVoiceVolume
+          : AppConstants.musicSoloVolume);
       if (_hasMusic) await _musicPlayer.setSource(_attemptMusic);
+      await _voicePlayer.setReleaseMode(ReleaseMode.stop);
+      await _voicePlayer.setVolume(AppConstants.voiceGuideVolume);
+      final voice = _voiceGuide;
+      if (voice != null) await _voicePlayer.setSource(voice);
     } catch (_) {
       // Sin audio disponible: el conteo sigue siendo visual y la captura mide
       // igual, solo que sin musica de apoyo.
@@ -443,35 +466,55 @@ class _EvaluationPageState extends ConsumerState<EvaluationPage>
     });
   }
 
-  /// Detiene lo que sonara y deja la pista cargada al principio.
+  /// Pistas del intento (música y voz guía) con su fuente, solo las que tenga
+  /// el paso.
+  Map<AudioPlayer, AssetSource> get _attemptTracks => {
+        if (_hasMusic) _musicPlayer: _attemptMusic,
+        if (_voiceGuide case final voice?) _voicePlayer: voice,
+      };
+
+  /// Detiene lo que sonara y deja cada pista cargada al principio.
   Future<void> _prepareStepMusic() async {
-    if (!_hasMusic) return;
-    try {
-      await _musicPlayer.stop();
-      await _musicPlayer.setSource(_attemptMusic);
-    } catch (_) {
-      // Sin música: la captura no depende de ella.
-    }
+    await Future.wait([
+      for (final e in _attemptTracks.entries)
+        _guard(() async {
+          await e.key.stop();
+          await e.key.setSource(e.value);
+        }),
+    ]);
   }
 
-  /// Arranca la música desde el principio. Devuelve `false` si el paso no
-  /// tiene música o no se pudo reproducir (la captura sigue igual).
+  /// Arranca música y voz desde el principio. Primero se colocan las dos en
+  /// el segundo 0 y después se lanzan juntas, para que el desfase entre ellas
+  /// sea solo el de la llamada nativa y no el de un seek. Devuelve `false` si
+  /// no sonó ninguna (la captura sigue igual).
   Future<bool> _startStepMusic() async {
-    if (!_hasMusic) return false;
-    try {
-      await _musicPlayer.seek(Duration.zero);
-      await _musicPlayer.resume();
-      return true;
-    } catch (_) {
-      return false;
-    }
+    final players = _attemptTracks.keys.toList();
+    if (players.isEmpty) return false;
+    await Future.wait([
+      for (final p in players) _guard(() => p.seek(Duration.zero)),
+    ]);
+    final started = await Future.wait([
+      for (final p in players) _guard(p.resume),
+    ]);
+    return started.contains(true);
   }
 
   Future<void> _stopStepMusic() async {
+    await Future.wait([
+      _guard(_musicPlayer.stop),
+      _guard(_voicePlayer.stop),
+    ]);
+  }
+
+  /// Una pista que falla no corta la otra ni la captura, que no dependen
+  /// del audio. Devuelve si la acción terminó bien.
+  Future<bool> _guard(Future<void> Function() action) async {
     try {
-      await _musicPlayer.stop();
+      await action();
+      return true;
     } catch (_) {
-      // Nada que parar.
+      return false;
     }
   }
 
@@ -574,6 +617,7 @@ class _EvaluationPageState extends ConsumerState<EvaluationPage>
     _captureTimer?.cancel();
     _pulse.dispose();
     _musicPlayer.dispose();
+    _voicePlayer.dispose();
     _tickPlayer.dispose();
     _goPlayer.dispose();
     _controller?.dispose();

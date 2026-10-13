@@ -25,6 +25,24 @@ void main() {
         _glbAnimations(StepAnimations.modelAsset), StepAnimations.all.toSet());
   });
 
+  test('el GLB incluye el dance grid en la escena', () {
+    final bytes = File(StepAnimations.modelAsset).readAsBytesSync();
+    final data = ByteData.sublistView(bytes);
+    final jsonLength = data.getUint32(12, Endian.little);
+    final gltf = jsonDecode(utf8.decode(bytes.sublist(20, 20 + jsonLength)))
+        as Map<String, dynamic>;
+    final nodes = gltf['nodes'] as List;
+    final scene = (gltf['scenes'] as List).first as Map;
+    final roots = [for (final i in scene['nodes'] as List) nodes[i]['name']];
+    expect(roots, contains(StepAnimations.danceGridNode));
+  });
+
+  test('cada animación tiene un conteo de tiempos válido', () {
+    for (final a in StepAnimations.all) {
+      expect(StepAnimations.beatsFor(a), greaterThan(0), reason: a);
+    }
+  });
+
   test('cada paso WSF del catálogo tiene su animación', () {
     const expected = {
       'basico_adelante_atras': 'basico_3d',

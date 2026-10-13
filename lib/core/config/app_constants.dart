@@ -20,6 +20,13 @@ class AppConstants {
   /// (RF-08.3, desactivable en Configuracion).
   static const int stillnessSeconds = 2;
 
+  /// Mezcla del intento cuando el paso tiene voz guía: la voz manda (conteo e
+  /// instrucciones claras) y la música queda de fondo marcando el ritmo.
+  /// Sin voz, la música suena a [musicSoloVolume].
+  static const double voiceGuideVolume = 1.0;
+  static const double musicUnderVoiceVolume = 0.75;
+  static const double musicSoloVolume = 1.0;
+
   /// Umbral de "Paso Aprendido" (RN-02): mejor precisión ≥ esto. Pendiente de
   /// calibrar (plan.txt §8); configurable a futuro.
   static const double learnedThreshold = 80; // %

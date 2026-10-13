@@ -78,6 +78,17 @@ class ModelViewerController {
         "mv.cameraOrbit = o.theta + 'rad ' + o.phi + 'rad ' + r + 'm';",
       );
 
+  /// Ejecuta un script autónomo (que localiza el visor por su cuenta), p. ej.
+  /// el conteo de `BeatCounter` en web.
+  Future<void> inject(String script) async {
+    if (isReleased) return;
+    try {
+      await runViewerScript(_webView, script);
+    } catch (e) {
+      debugPrint('ModelViewerController.inject: $e');
+    }
+  }
+
   /// La app pasa a segundo plano: se detiene el bucle (y con él el render).
   Future<void> pause() => _run('mv.pause();');
 

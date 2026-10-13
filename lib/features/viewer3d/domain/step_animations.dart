@@ -1,4 +1,4 @@
-/// Mapeo paso → animación ("action") del maniquí 3D `assets/models/bailarin.glb`.
+/// Mapeo paso → animación ("action") del maniquí 3D `assets/models/DanceGrid1.glb`.
 ///
 /// El GLB trae 9 animaciones, una por paso WSF Bronce. La pantalla 3D recibe el
 /// paso como texto libre (id del catálogo, nombre visible o un alias como
@@ -6,7 +6,7 @@
 class StepAnimations {
   StepAnimations._();
 
-  static const String modelAsset = 'assets/models/bailarin.glb';
+  static const String modelAsset = 'assets/models/DanceGrid1.glb';
 
   static const String basico = 'basico_3d';
   static const String guapeo = 'guapeo_3d';
@@ -17,6 +17,9 @@ class StepAnimations {
   static const String cuban = 'cuban_3d';
   static const String toeHeel = 'toeheel_3d';
   static const String kickFlick = 'kickflick_3d';
+
+  /// Nodo del dance grid (cuadrícula de pasos) en la base de la pista.
+  static const String danceGridNode = 'salsa_dance_grid';
 
   /// Todas las animaciones del GLB (el test verifica que existan en el asset).
   static const List<String> all = [
@@ -30,6 +33,18 @@ class StepAnimations {
     toeHeel,
     kickFlick,
   ];
+
+  /// Tiempos musicales que dura un ciclo de cada animación. El número que
+  /// flota sobre el maniquí avanza cada `duración / tiempos` segundos, así que
+  /// basta con esto para que vaya a ritmo (y sigue al slider de velocidad,
+  /// porque se calcula sobre el tiempo de la animación, no sobre el reloj).
+  /// Los pasos de salsa son una frase de 8 tiempos; si alguna animación se
+  /// regraba con otra longitud, se ajusta aquí.
+  static const Map<String, int> _beatsPerLoop = {};
+  static const int defaultBeatsPerLoop = 8;
+
+  static int beatsFor(String animation) =>
+      _beatsPerLoop[animation] ?? defaultBeatsPerLoop;
 
   /// Coincidencia exacta tras normalizar: ids del catálogo y alias conocidos.
   static const Map<String, String> _exact = {

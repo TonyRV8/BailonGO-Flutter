@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:model_viewer_plus/model_viewer_plus.dart';
 
 import '../../domain/step_animations.dart';
+import '../controllers/beat_counter.dart';
 import '../controllers/model_viewer_controller.dart';
 
 /// Degradado naranja del fondo del visor (Flutter detrás del WebView
@@ -21,6 +22,7 @@ const _viewerCss = '''
     --poster-color: transparent;
     --progress-bar-color: #FFFFFF;
   }
+${BeatCounter.css}
 ''';
 
 /// Avisa a Flutter cuando `<model-viewer>` termina de cargar el GLB (o falla).
@@ -75,10 +77,24 @@ class _Step3DPageState extends State<Step3DPage> with WidgetsBindingObserver {
   bool _loaded = kIsWeb;
   bool _failed = false;
 
+  /// Conteo de tiempos sobre el maniquí (ver [BeatCounter]); solo si el paso
+  /// tiene animación.
+  late final String? _beatScript = _animation == null
+      ? null
+      : BeatCounter.script(StepAnimations.beatsFor(_animation));
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    // En web el `relatedJs` no se ejecuta: el conteo se arranca desde aquí
+    // (el script espera solo a que el visor esté en el documento).
+    final beatScript = _beatScript;
+    if (kIsWeb && beatScript != null) {
+      WidgetsBinding.instance.addPostFrameCallback(
+        (_) => unawaited(_viewer.inject(beatScript)),
+      );
+    }
   }
 
   @override
@@ -164,8 +180,10 @@ class _Step3DPageState extends State<Step3DPage> with WidgetsBindingObserver {
                 shadowIntensity: 1,
                 animationName: _animation,
                 autoPlay: _animation != null,
+                innerModelViewerHtml:
+                    _animation == null ? null : BeatCounter.html,
                 relatedCss: _viewerCss,
-                relatedJs: _viewerJs,
+                relatedJs: _viewerJs + (kIsWeb ? '' : _beatScript ?? ''),
                 javascriptChannels: {
                   JavascriptChannel(
                     _channelName,

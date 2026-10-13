@@ -60,4 +60,4 @@ flutter:
     - assets/fixtures/ # ref/good/bad.mov para validar el motor (dev)
     - assets/sounds/
     - assets/references/ # landmarks de las tomas ideales (tool/build_references.py)
-    - assets/models/ # bailarin.glb: maniquí 3D con una animación por paso
+    - assets/models/ # DanceGrid1.glb: maniquí 3D + pista con dance grid, una animación por paso
