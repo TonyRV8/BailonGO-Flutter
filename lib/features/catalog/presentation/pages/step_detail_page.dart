@@ -8,6 +8,7 @@ import '../../../../core/router/app_router.dart';
 import '../../../../core/router/app_routes.dart';
 import '../../../evaluation/presentation/widgets/reset_progress.dart';
 import '../../../viewer3d/domain/step_animations.dart';
+import '../../domain/entities/step_stats.dart';
 import '../../../viewer3d/presentation/pages/step_3d_page.dart';
 import '../providers/catalog_providers.dart';
 
@@ -30,7 +31,7 @@ class StepDetailPage extends ConsumerWidget {
       );
     }
 
-    final bestScore = ref.watch(bestScoreProvider(stepId));
+    final stats = ref.watch(stepStatsProvider(stepId));
     final theme = Theme.of(context);
 
     return Scaffold(
@@ -51,23 +52,29 @@ class StepDetailPage extends ConsumerWidget {
             ],
           ),
           const SizedBox(height: 16),
-          // Mejor precisión histórica (RF-06 / RN-04).
+          // Mejor precisión histórica (RF-06 / RN-04) e intentos realizados.
           Card(
-            child: ListTile(
-              leading: const Icon(Icons.emoji_events_outlined),
-              title: const Text('Mejor precisión'),
-              trailing: bestScore.when(
-                loading: () => const SizedBox(
-                  width: 18,
-                  height: 18,
-                  child: CircularProgressIndicator(strokeWidth: 2),
+            child: Column(
+              children: [
+                ListTile(
+                  leading: const Icon(Icons.emoji_events_outlined),
+                  title: const Text('Mejor precisión'),
+                  trailing: _StatValue(
+                    stats: stats,
+                    text: (s) =>
+                        s.best == null ? '—' : '${s.best!.toStringAsFixed(0)}%',
+                  ),
                 ),
-                error: (_, __) => const Text('—'),
-                data: (score) => Text(
-                  score == null ? '—' : '${score.toStringAsFixed(0)}%',
-                  style: theme.textTheme.titleMedium,
+                const Divider(height: 1),
+                ListTile(
+                  leading: const Icon(Icons.repeat),
+                  title: const Text('Intentos realizados'),
+                  trailing: _StatValue(
+                    stats: stats,
+                    text: (s) => '${s.attempts}',
+                  ),
                 ),
-              ),
+              ],
             ),
           ),
           const SizedBox(height: 16),
@@ -129,6 +136,29 @@ class StepDetailPage extends ConsumerWidget {
           ],
         ],
       ),
+    );
+  }
+}
+
+/// Valor de una métrica del paso, con su estado de carga. Las dos métricas
+/// salen del mismo provider, así que comparten spinner y error.
+class _StatValue extends StatelessWidget {
+  const _StatValue({required this.stats, required this.text});
+
+  final AsyncValue<StepStats> stats;
+  final String Function(StepStats) text;
+
+  @override
+  Widget build(BuildContext context) {
+    return stats.when(
+      loading: () => const SizedBox(
+        width: 18,
+        height: 18,
+        child: CircularProgressIndicator(strokeWidth: 2),
+      ),
+      error: (_, __) => const Text('—'),
+      data: (s) =>
+          Text(text(s), style: Theme.of(context).textTheme.titleMedium),
     );
   }
 }

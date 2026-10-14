@@ -41,8 +41,7 @@ Future<void> confirmAndResetProgress(
         .read(attemptRepositoryProvider)
         .deleteAttempts(uid: uid, pasoId: pasoId);
     // Ficha del paso, catálogo y progreso del perfil.
-    ref.invalidate(bestScoreProvider);
-    ref.invalidate(userBestScoresProvider);
+    ref.invalidate(userStepStatsProvider);
     messenger.showSnackBar(
       SnackBar(content: Text('Progreso reiniciado: $count intentos borrados.')),
     );

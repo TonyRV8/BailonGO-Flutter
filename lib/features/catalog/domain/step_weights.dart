@@ -247,34 +247,39 @@ const Map<String, List<int>> kFeatureGroups = {
 
 /// Multiplicador por grupo. 1.0 = el peso razonado del paso tal cual.
 /// Obtenido con `dart run tool/bench_real.dart --wsweep`, que en cada
-/// candidato reajusta los dos umbrales de cada paso: pérdida 63.3 -> 58.4
-/// sobre las 110 tomas del corpus, sin tocar los controles (la referencia
-/// contra sí misma sigue en 100, la inmovilidad en 0 y los bailes ajenos
-/// en 15).
+/// candidato reajusta además los dos umbrales de cada paso. Calibración final
+/// (2026-10-13) sobre 154 casos y 67 notas humanas.
 ///
-/// Lectura de los valores, contrastada con `--perfeature`:
-///   pieX x2      la posición lateral del tobillo es, tras la apertura del
-///                compás, lo que mejor sigue al revisor
-///   brazos x2    0.05 -> 0.10; aportan poco pero en la dirección correcta,
-///                al revés de lo que sugerían los alumnos simulados
-///   rodillas x0.5 la flexión de la izquierda ordena bien y la de la derecha
-///                al revés, así que en conjunto informan poco
-///   hombros x0.1 su inclinación resultó casi muda entre alumnos reales
+/// Lo que mide `--perfeature` es cuánto ayuda cada característica a separar lo
+/// que el revisor puntuó alto de lo que puntuó bajo, y el barrido coincide con
+/// ello: el peso se concentra en la apertura del compás y en el desplazamiento
+/// lateral del pie y de la rodilla, que son lo que mejor sigue al criterio
+/// humano, mientras que la orientación y la altura del pie quedan al mínimo
+/// porque ordenaban al revés. Son las características que más se alteran con
+/// el temblor del detector y con el ángulo de la cámara, no con la calidad
+/// del paso.
 ///
-/// AVISO: son 25 tomas con nota directa del revisor, así que estos valores
-/// describen este corpus. El de hombros contradice la biomecánica del guapeo
-/// (donde el acento de hombro es parte del paso) y conviene revisarlo si el
-/// corpus crece.
+/// Los grupos que el barrido llevaría a cero se dejan en 0.1 a propósito. Una
+/// característica con peso cero queda fuera del costo Y de los consejos
+/// (RF-10), así que apagar la orientación del pie impediría para siempre
+/// decirle al alumno que corrija el pie en el Suzy Q o en los giros. El
+/// mínimo cuesta 0.7 de pérdida y conserva la realimentación.
+///
+/// AVISO: estos valores describen el corpus disponible, 67 grabaciones
+/// calificadas de cinco personas. Que la orientación del pie pese tan poco
+/// contradice la técnica del Suzy Q y de los giros, donde es la firma del
+/// paso; lo que dice la medición es que, vista por una cámara frontal con
+/// este detector, no distingue una buena ejecución de una mala.
 const Map<String, double> kGroupScale = {
-  'rodillas': 0.5,
-  'apertura': 1.0,
-  'pieAlto': 1.0,
-  'pieX': 2.0,
-  'rodillaX': 1.0,
-  'pieOrient': 1.0,
-  'brazos': 2.0,
-  'hombros': 0.1,
-  'manos': 1.0,
+  'rodillas': 2.0,
+  'apertura': 4.0,
+  'pieAlto': 0.1,
+  'pieX': 4.0,
+  'rodillaX': 2.0,
+  'pieOrient': 0.1,
+  'brazos': 0.25,
+  'hombros': 1.0,
+  'manos': 0.1,
   'cadera': 1.0,
 };
 

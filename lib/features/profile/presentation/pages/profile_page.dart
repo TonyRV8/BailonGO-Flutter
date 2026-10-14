@@ -9,6 +9,7 @@ import '../../../../core/router/app_routes.dart';
 import '../../../auth/domain/entities/app_user.dart';
 import '../../../auth/presentation/providers/auth_providers.dart';
 import '../../../catalog/domain/entities/dance_step.dart';
+import '../../../catalog/domain/entities/step_stats.dart';
 import '../../../catalog/presentation/providers/catalog_providers.dart';
 import '../../../settings/presentation/providers/settings_providers.dart';
 import '../providers/profile_providers.dart';
@@ -24,7 +25,7 @@ class ProfilePage extends ConsumerWidget {
     return RefreshIndicator(
       onRefresh: () async {
         ref.invalidate(profileProvider);
-        ref.invalidate(userBestScoresProvider);
+        ref.invalidate(userStepStatsProvider);
       },
       child: ListView(
         padding: const EdgeInsets.all(16),
@@ -174,7 +175,7 @@ class _Progress extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final catalog = ref.watch(catalogProvider);
-    final scores = ref.watch(userBestScoresProvider);
+    final stats = ref.watch(userStepStatsProvider);
     // Umbral de "Aprendido" configurable (RN-02, users.settings).
     final threshold = ref.watch(currentSettingsProvider).learnedThreshold;
 
@@ -182,7 +183,11 @@ class _Progress extends ConsumerWidget {
       loading: () => const Center(child: CircularProgressIndicator()),
       error: (e, _) => Text('Error: $e'),
       data: (steps) {
-        final best = scores.value ?? const <String, double>{};
+        final data = stats.value ?? const <String, StepStats>{};
+        final best = {
+          for (final e in data.entries)
+            if (e.value.best != null) e.key: e.value.best!,
+        };
 
         _StepStatus statusOf(DanceStep s) {
           final b = best[s.id];
@@ -212,7 +217,11 @@ class _Progress extends ConsumerWidget {
                         label: 'En práctica',
                         value: '$practicing',
                         color: Colors.orange)),
-                Expanded(child: _Stat(label: 'Total', value: '${steps.length}')),
+                Expanded(child: _Stat(label: 'Pasos', value: '${steps.length}')),
+                Expanded(
+                    child: _Stat(
+                        label: 'Intentos',
+                        value: '${data.values.fold<int>(0, (a, s) => a + s.attempts)}')),
               ],
             ),
             const SizedBox(height: 12),
@@ -223,7 +232,12 @@ class _Progress extends ConsumerWidget {
                 child: ListTile(
                   leading: _StatusIcon(status),
                   title: Text(s.nombre),
-                  subtitle: Text(_label(status)),
+                  subtitle: Text(() {
+                    final n = data[s.id]?.attempts ?? 0;
+                    final intentos =
+                        '$n ${n == 1 ? 'intento' : 'intentos'}';
+                    return '${_label(status)} · $intentos';
+                  }()),
                   trailing: Text(
                     b == null ? '—' : '${b.toStringAsFixed(0)}%',
                     style: Theme.of(context).textTheme.titleMedium,

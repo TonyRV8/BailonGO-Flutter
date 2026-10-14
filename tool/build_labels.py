@@ -5,7 +5,10 @@ La nota es la del revisor en escala 1-10; aquí se guarda ya en porcentaje
 para dar una toma por buena.
 
 De dónde sale cada nota:
-  * Abdiel      del propio nombre del archivo: Abdiel_<Paso>_<nota>[_notas].
+  * Nombre      cuando el archivo trae la nota en el nombre se usa esa, que
+                es la fuente más directa. Dos formatos:
+                  Abdiel_<Paso>_<nota>[_<notas>]       (tanda de Abdiel)
+                  Avril<n>_<Paso>[_<desfase>]_calif<nota>[_arg<motivo>]
                 "NADA" = no ejecutó el paso (SUPUESTO: nota muy baja).
   * Gabo        lista dada por el usuario el 2026-10-05, por paso. Cuando un
                 paso tiene varias tomas suyas, la nota va a la que lleva "bien"
@@ -82,18 +85,48 @@ PREVIO = {
 }
 
 TOL_NOTA = 7      # nota explícita del revisor: media nota arriba y abajo
+
+# Medio punto de cortesía a las tomas de Avril (2026-10-13, decisión del
+# usuario). Son las mejores ejecuciones que se pudieron grabar y, al no haber
+# material de 9 o 10, hacen de techo del corpus: si se las deja en su nota
+# nominal, el ajuste no tiene ningún motivo para dejar alcanzable el
+# sobresaliente. Es un ajuste DECLARADO de la escala, no una nota del revisor,
+# y por eso queda escrito en el campo `src` de cada entrada.
+AVRIL_BONO = 5
 TOL_BANDA = 10    # "3-5" -> 40 +- 10
 BANDA = 40
 
 
-def abdiel_score(fname):
-    """Nota embebida en el nombre: Abdiel_<Paso>_<nota>_<lo que sea>."""
-    parts = os.path.splitext(fname)[0].split("_")
+def name_score(fname):
+    """Nota embebida en el nombre del archivo.
+
+    Devuelve (nota, encontrada). `encontrada` distingue "no trae nota" de
+    "trae NADA", que significa que no ejecutó el paso.
+
+    El marcador `calif<n>` vale para cualquier toma. La nota en la tercera
+    posición del nombre SÓLO se lee en la tanda de Abdiel, que es la que usa
+    ese formato: en los demás, ese hueco describe la toma y suele empezar por
+    un número de segundos ("notermina_9seg", "muycorto_6pordebajo"), que no es
+    una calificación.
+    """
+    base = os.path.splitext(fname)[0]
+    m = re.search(r"calif(\d+)", base, re.I)
+    if m:
+        return int(m.group(1)), True
+    if not base.lower().startswith(("abdiel", "adbiel")):
+        return None, False
+    parts = base.split("_")
     raw = parts[2] if len(parts) > 2 else ""
     if raw.upper().startswith("NADA"):
-        return None
+        return None, True
     m = re.match(r"(\d+)", raw)
-    return int(m.group(1)) if m else None
+    return (int(m.group(1)), True) if m else (None, False)
+
+
+def name_reason(fname):
+    """Motivo de la nota, cuando el nombre lo trae tras `arg`."""
+    m = re.search(r"_arg(.+)$", os.path.splitext(fname)[0], re.I)
+    return m.group(1) if m else None
 
 
 def main():
@@ -125,17 +158,28 @@ def main():
         for f in files:
             key = f"{folder}/{os.path.splitext(f)[0]}"
             low = f.lower()
-            if low.startswith(("abdiel", "adbiel")):
-                n = abdiel_score(f)
+            n, found = name_score(f)
+            if found:
                 if n is None:
                     labels[key] = {"score": 10, "tol": 10,
                                    "src": "SUPUESTO: 'NADA' = no ejecutó el paso"}
                 else:
-                    labels[key] = {"score": n * 10, "tol": TOL_NOTA,
-                                   "src": f"revisor {n}/10 (nombre del archivo)"}
+                    src = f"revisor {n}/10 (nombre del archivo)"
+                    reason = name_reason(f)
+                    if reason:
+                        src += f" — {reason}"
+                    score = n * 10
+                    if low.startswith("avril"):
+                        score += AVRIL_BONO
+                        src += f" +{AVRIL_BONO} de cortesía (techo del corpus)"
+                    labels[key] = {"score": score, "tol": TOL_NOTA, "src": src}
             elif key in AVRIL:
-                labels[key] = {"score": AVRIL[key] * 10, "tol": TOL_NOTA,
-                               "src": f"revisor {AVRIL[key]}/10"}
+                labels[key] = {
+                    "score": AVRIL[key] * 10 + AVRIL_BONO,
+                    "tol": TOL_NOTA,
+                    "src": f"revisor {AVRIL[key]}/10 "
+                           f"+{AVRIL_BONO} de cortesía (techo del corpus)",
+                }
             elif low.startswith("avril"):
                 labels[key] = {"score": None, "tol": 0,
                                "src": "sin etiqueta: el revisor solo puntuó otra toma suya"}

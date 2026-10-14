@@ -74,10 +74,28 @@ class Label {
 }
 
 const lblSelf = Label('ideal', 100, 3, weight: 1);
-const lblRegular = Label('regular', 75, 5, weight: 2);
+// Peso alto a propósito: es la ÚNICA toma del corpus que la propia experta
+// calificó, y marca dónde está el 75 %. Con peso 2 el ajuste la sacrificaba
+// para perseguir notas de alumno que quedaban fuera de alcance de todos
+// modos, y acabó dándole 90 a la ejecución que la experta puntuó 7-8.
+const lblRegular = Label('regular', 75, 5, weight: 6);
 const lblStill = Label('quieto', 0, 5, weight: 2);
 const lblShift = Label('desfase', 92, 6, weight: 1);
 const lblSlow = Label('lento10', 85, 10, weight: 1);
+
+/// Control del extremo ALTO de la escala: la propia referencia tal como
+/// saldría de una captura real, con el temblor del detector, una complexión
+/// algo distinta y un pequeño retraso de reacción. Equivale a la profesora
+/// repitiendo su propio paso delante del teléfono.
+///
+/// Hace falta porque el resto del corpus no dice dónde empieza el sobresaliente:
+/// la referencia contra sí misma da 100 con cualquier umbral, por lo que no
+/// aporta información al ajuste, y la mejor ejecución humana disponible está
+/// calificada con 8 sobre 10. Sin este control, el ajuste no tiene motivo
+/// para dejar alcanzable el 90 % y la escala se cierra por arriba.
+const lblGreat = Label('excelente', 95, 5, weight: 3);
+
+bool kHighPriority = false;
 
 /// Notas de `tool/labels.json`, por clave "<Carpeta>/<archivo sin extensión>".
 Map<String, Label> loadLabels(String path) {
@@ -106,7 +124,15 @@ Map<String, Label> loadLabels(String path) {
       who,
       score ?? 0,
       (v['tol'] as num?)?.toDouble() ?? 7,
-      weight: score == null ? 0 : 2,
+      // --priorizaalto: el ajuste atiende antes a las tomas bien calificadas
+      // que a las flojas. Es una decisión de producto, no una medición: vale
+      // más no castigar a quien baila bien que clavar la nota de quien baila
+      // mal, porque el alumno abandona por lo primero.
+      weight: score == null
+          ? 0
+          : (kHighPriority && score >= 70)
+              ? 6
+              : 2,
       scored: score != null,
       direct: (v['src'] as String? ?? '').contains('revisor'),
     );
@@ -205,6 +231,18 @@ List<RealCase> buildCases(Map<String, Take> prof, Map<String, Take> real,
               ref[i].length, (c) => ref[i][c] + (ref[i + 1][c] - ref[i][c]) * t);
         }),
         ref));
+    // Control del extremo alto: dos variantes de la referencia con ruido de
+    // captura y amplitud algo distinta (ver [lblGreat]).
+    for (final v in const [(0.92, 11), (1.08, 12)]) {
+      cases.add(RealCase(
+          id,
+          Take('$id/excelente', const [], g.aspect),
+          lblGreat,
+          featuresOf(
+              Take('$id/excelente', liveLike(g.frames, v.$1, v.$2), g.aspect),
+              durationMs: dur),
+          ref));
+    }
     // Control: quedarse quieto en la primera pose de la referencia.
     cases.add(RealCase(id, Take('$id/quieto', const [], 1), lblStill,
         List<List<double>>.filled(ref.length, ref.first), ref));
@@ -247,6 +285,54 @@ List<RealCase> buildCases(Map<String, Take> prof, Map<String, Take> real,
     return s != 0 ? s : a.label.target.compareTo(b.label.target) * -1;
   });
   return cases;
+}
+
+/// Devuelve los landmarks de [frames] como los entregaría una captura real de
+/// la misma ejecución: amplitud del movimiento escalada por [amp] respecto a
+/// la postura media, temblor correlacionado del detector y un retraso de
+/// reacción de cinco fotogramas. El escalado se hace respecto a la postura
+/// media y no al centro de la cadera, para cambiar cuánto se mueve el cuerpo y
+/// no su tamaño.
+List<List<double>> liveLike(List<List<double>> frames, double amp, int seed) {
+  const n = 33;
+  const sigmaJoint = 0.0025, sigmaFoot = 0.005;
+  const lag = 5;
+  final rng = math.Random(seed);
+  double gauss() {
+    final u1 = rng.nextDouble().clamp(1e-12, 1.0);
+    return math.sqrt(-2 * math.log(u1)) * math.cos(2 * math.pi * rng.nextDouble());
+  }
+
+  // Postura media de cada landmark respecto al centro de la cadera.
+  final mean = List<double>.filled(n * 2, 0);
+  for (final f in frames) {
+    final hx = (f[23 * 4] + f[24 * 4]) / 2;
+    final hy = (f[23 * 4 + 1] + f[24 * 4 + 1]) / 2;
+    for (var i = 0; i < n; i++) {
+      mean[i * 2] += f[i * 4] - hx;
+      mean[i * 2 + 1] += f[i * 4 + 1] - hy;
+    }
+  }
+  for (var k = 0; k < mean.length; k++) {
+    mean[k] /= math.max(frames.length, 1);
+  }
+
+  final nx = List<double>.filled(n, 0), ny = List<double>.filled(n, 0);
+  return List<List<double>>.generate(frames.length, (t) {
+    final src = frames[math.max(0, t - lag)];
+    final out = List<double>.from(src);
+    final hx = (src[23 * 4] + src[24 * 4]) / 2;
+    final hy = (src[23 * 4 + 1] + src[24 * 4 + 1]) / 2;
+    for (var i = 0; i < n; i++) {
+      final sigma = i >= 27 ? sigmaFoot : sigmaJoint;
+      nx[i] = 0.6 * nx[i] + 0.8 * sigma * gauss();
+      ny[i] = 0.6 * ny[i] + 0.8 * sigma * gauss();
+      final mx = mean[i * 2], my = mean[i * 2 + 1];
+      out[i * 4] = hx + mx + (src[i * 4] - hx - mx) * amp + nx[i];
+      out[i * 4 + 1] = hy + my + (src[i * 4 + 1] - hy - my) * amp + ny[i];
+    }
+    return out;
+  });
 }
 
 typedef ParamsFor = DtwParams Function(String stepId);
@@ -598,12 +684,24 @@ double _mae(List<double> a, List<double> b) {
 /// --fit: por paso, floor y max que minimizan la pérdida de SUS tomas. El DTW
 /// se corre una vez por toma con los parámetros globales; la curva se
 /// re-mapea con [rescore], así que la rejilla puede ser fina.
-/// Límites del ajuste por paso: el suelo nunca por encima de [kFloorMax]
-/// (0.9 es el coste de la toma regular de la profesora: por debajo tiene que
-/// haber curva, no meseta) y un tramo mínimo [kMinSpan] entre suelo y techo
-/// para que la nota no sea un acantilado.
-const double kFloorMax = 0.7;
+/// Límites del ajuste por paso: el suelo nunca por encima de [kFloorMax] y un
+/// tramo mínimo [kMinSpan] entre suelo y techo, para que la nota no sea un
+/// acantilado. El suelo se amplió a 1.0 cuando entró el control [lblGreat]:
+/// una captura real de la propia referencia ya cuesta del orden de la mitad de
+/// lo que cuesta quedarse quieto, así que con el tope anterior de 0.7 el
+/// sobresaliente quedaba fuera de alcance por construcción.
+const double kFloorMax = 1.0;
 const double kMinSpan = 0.4;
+
+/// El umbral de "ejecución perfecta" de un paso no puede superar esta
+/// fracción de lo que cuesta su toma imperfecta. Sin la restricción, el
+/// ajuste subía el umbral del Right Spot Turn a 0.89 persiguiendo las tomas
+/// de alumno, que están en 1.19-1.48 y quedaban fuera de alcance de todos
+/// modos; lo único que conseguía era regalarle el 94 de alineación a la
+/// ejecución que la experta puntuó 7-8, que acabó con un 90. Bajarlo no
+/// cuesta nada en el extremo alto: el control de captura real de la
+/// referencia cuesta 0.29 y sigue en 100.
+const double kFloorVsRegular = 0.95;
 
 Map<String, DtwParams> fitPerStep(List<RealCase> cases, DtwParams global,
     {double step = 0.02, Map<RealCase, DtwResult>? cache}) {
@@ -614,9 +712,16 @@ Map<String, DtwParams> fitPerStep(List<RealCase> cases, DtwParams global,
         if (c.step == id) (c, cache?[c] ?? scoreCase(c, global)),
     ];
     if (mine.isEmpty) continue;
+    // Tope derivado del dato: ver [kFloorVsRegular].
+    var floorCap = kFloorMax;
+    for (final (c, r) in mine) {
+      if (c.label == lblRegular && r.relativeCost.isFinite) {
+        floorCap = math.min(floorCap, r.relativeCost * kFloorVsRegular);
+      }
+    }
     DtwParams? best;
     var bestLoss = double.infinity;
-    for (var floor = 0.05; floor <= kFloorMax + 1e-4; floor += step) {
+    for (var floor = 0.05; floor <= floorCap + 1e-4; floor += step) {
       for (var max = floor + kMinSpan; max <= 2.2001; max += step) {
         final p = global.copyWith(alignNoiseFloor: floor, alignMax: max);
         final l = lossOfResults(mine, p);
@@ -778,6 +883,7 @@ void printFeatures(List<RealCase> cases, ParamsFor pf) {
 
   for (final c in cases) {
     if (c.label == lblSelf ||
+        c.label == lblGreat ||
         c.label == lblStill ||
         c.label == lblShift ||
         c.label == lblSlow) {
@@ -812,6 +918,7 @@ void main(List<String> args) {
   }
   final stepArg = args.where((a) => a.startsWith('--step=')).toList();
   final only = stepArg.isEmpty ? null : {stepArg.first.substring(7)};
+  kHighPriority = args.contains('--priorizaalto');
   final labels = loadLabels('tool/labels.json');
   final cases = buildCases(prof, real, labels,
       mirror: args.contains('--mirror'), only: only);

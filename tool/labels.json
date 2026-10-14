@@ -9,6 +9,21 @@
   "src": "revisor 7/10 (nombre del archivo)",
   "tol": 7
  },
+ "Basico/Avril2_Basico_sobra1s_calif7": {
+  "score": 75,
+  "src": "revisor 7/10 (nombre del archivo) +5 de cortesía (techo del corpus)",
+  "tol": 7
+ },
+ "Basico/Avril3_Basico_sobra1s_calif8": {
+  "score": 85,
+  "src": "revisor 8/10 (nombre del archivo) +5 de cortesía (techo del corpus)",
+  "tol": 7
+ },
+ "Basico/Avril_Basico_sobra1s_calif7": {
+  "score": 75,
+  "src": "revisor 7/10 (nombre del archivo) +5 de cortesía (techo del corpus)",
+  "tol": 7
+ },
  "Basico/Gabo_7pordebajo": {
   "score": 50,
   "src": "revisor 5/10 (lista por paso)",
@@ -17,6 +32,21 @@
  "CubanBreak/Abdiel_CubanBreak_4_sobra1": {
   "score": 40,
   "src": "revisor 4/10 (nombre del archivo)",
+  "tol": 7
+ },
+ "CubanBreak/Avril2_CubanBreak_sobra1s_calif7": {
+  "score": 75,
+  "src": "revisor 7/10 (nombre del archivo) +5 de cortesía (techo del corpus)",
+  "tol": 7
+ },
+ "CubanBreak/Avril3_CubanBreak_sobra1s_calif7": {
+  "score": 75,
+  "src": "revisor 7/10 (nombre del archivo) +5 de cortesía (techo del corpus)",
+  "tol": 7
+ },
+ "CubanBreak/Avril_CubanBreak_sobra1s_calif8": {
+  "score": 85,
+  "src": "revisor 8/10 (nombre del archivo) +5 de cortesía (techo del corpus)",
   "tol": 7
  },
  "CubanBreak/Gabo_2porencima_bien": {
@@ -39,6 +69,21 @@
   "src": "revisor 5/10 (nombre del archivo)",
   "tol": 7
  },
+ "Cucaracha/Avril2_Cucaracha_calif8": {
+  "score": 85,
+  "src": "revisor 8/10 (nombre del archivo) +5 de cortesía (techo del corpus)",
+  "tol": 7
+ },
+ "Cucaracha/Avril3_Cucaracha_calif6": {
+  "score": 65,
+  "src": "revisor 6/10 (nombre del archivo) +5 de cortesía (techo del corpus)",
+  "tol": 7
+ },
+ "Cucaracha/Avril_Cucaracha_calif8": {
+  "score": 85,
+  "src": "revisor 8/10 (nombre del archivo) +5 de cortesía (techo del corpus)",
+  "tol": 7
+ },
  "Cucaracha/Gabo_SalePocoDeLaToma": {
   "score": 60,
   "src": "revisor 6/10 (lista por paso)",
@@ -59,9 +104,34 @@
   "src": "revisor 7/10 (nombre del archivo)",
   "tol": 7
  },
+ "CumbiaStep/Avril2_CumbiaStep_calif8": {
+  "score": 85,
+  "src": "revisor 8/10 (nombre del archivo) +5 de cortesía (techo del corpus)",
+  "tol": 7
+ },
+ "CumbiaStep/Avril3_CumbiaStep_calif8": {
+  "score": 85,
+  "src": "revisor 8/10 (nombre del archivo) +5 de cortesía (techo del corpus)",
+  "tol": 7
+ },
+ "CumbiaStep/Avril4_CumbiaStep_sobra1s_calif7": {
+  "score": 75,
+  "src": "revisor 7/10 (nombre del archivo) +5 de cortesía (techo del corpus)",
+  "tol": 7
+ },
+ "CumbiaStep/Avril5_CumbiaStep_sobra1s_calif6": {
+  "score": 65,
+  "src": "revisor 6/10 (nombre del archivo) +5 de cortesía (techo del corpus)",
+  "tol": 7
+ },
  "CumbiaStep/Avril_2porencima_bien": {
-  "score": 80,
-  "src": "revisor 8/10",
+  "score": 85,
+  "src": "revisor 8/10 +5 de cortesía (techo del corpus)",
+  "tol": 7
+ },
+ "CumbiaStep/Avril_CumbiaStep_calif8": {
+  "score": 85,
+  "src": "revisor 8/10 (nombre del archivo) +5 de cortesía (techo del corpus)",
   "tol": 7
  },
  "CumbiaStep/Gabo_2porencima_termina": {
@@ -94,6 +164,21 @@
   "src": "SUPUESTO: 'NADA' = no ejecutó el paso",
   "tol": 10
  },
+ "GiroPuntaTalon/Avril2_GiroPuntaTalon_falta1s_calif6_argnomarcalavueltahayquemarcharla": {
+  "score": 65,
+  "src": "revisor 6/10 (nombre del archivo) — nomarcalavueltahayquemarcharla +5 de cortesía (techo del corpus)",
+  "tol": 7
+ },
+ "GiroPuntaTalon/Avril_GiroPuntaTalon_calif7": {
+  "score": 75,
+  "src": "revisor 7/10 (nombre del archivo) +5 de cortesía (techo del corpus)",
+  "tol": 7
+ },
+ "GiroPuntaTalon/Avril_GiroPuntaTalon_falta1s_calif7": {
+  "score": 75,
+  "src": "revisor 7/10 (nombre del archivo) +5 de cortesía (techo del corpus)",
+  "tol": 7
+ },
  "GiroPuntaTalon/Gabo_bien": {
   "score": 40,
   "src": "revisor 4/10 (lista por paso)",
@@ -114,6 +199,16 @@
   "src": "revisor 6/10 (nombre del archivo)",
   "tol": 7
  },
+ "Guapeo/Avril2_Guapeo_calif8": {
+  "score": 85,
+  "src": "revisor 8/10 (nombre del archivo) +5 de cortesía (techo del corpus)",
+  "tol": 7
+ },
+ "Guapeo/Avril_Guapeo_calif8": {
+  "score": 85,
+  "src": "revisor 8/10 (nombre del archivo) +5 de cortesía (techo del corpus)",
+  "tol": 7
+ },
  "Guapeo/Gabo_bien": {
   "score": 30,
   "src": "revisor 3/10 (lista por paso)",
@@ -132,6 +227,11 @@
  "KickFlick/Abdiel_Kickflick_5": {
   "score": 50,
   "src": "revisor 5/10 (nombre del archivo)",
+  "tol": 7
+ },
+ "KickFlick/Avril_Kickflick_calif7": {
+  "score": 75,
+  "src": "revisor 7/10 (nombre del archivo) +5 de cortesía (techo del corpus)",
   "tol": 7
  },
  "KickFlick/Gabo_bien": {
@@ -159,6 +259,21 @@
   "src": "revisor 4/10 (nombre del archivo)",
   "tol": 7
  },
+ "RightSpotTurn/Avril2_RIghtSpotTurn_calif6_argnollevaelizqpaatras": {
+  "score": 65,
+  "src": "revisor 6/10 (nombre del archivo) — nollevaelizqpaatras +5 de cortesía (techo del corpus)",
+  "tol": 7
+ },
+ "RightSpotTurn/Avril3_RIghtSpotTurn_falta1s_calif5": {
+  "score": 55,
+  "src": "revisor 5/10 (nombre del archivo) +5 de cortesía (techo del corpus)",
+  "tol": 7
+ },
+ "RightSpotTurn/Avril_RIghtSpotTurn_calif6_argfaltounpasoatrasizq": {
+  "score": 65,
+  "src": "revisor 6/10 (nombre del archivo) — faltounpasoatrasizq +5 de cortesía (techo del corpus)",
+  "tol": 7
+ },
  "RightSpotTurn/Gabo_AlfinlaSeEquivoca_seestaAdaptando": {
   "score": null,
   "src": "sin etiqueta: su mejor toma del paso es < 3/10",
@@ -184,9 +299,24 @@
   "src": "revisor 7/10 (nombre del archivo)",
   "tol": 7
  },
+ "SuzyQ/Avril2_SuzyQ_calif5": {
+  "score": 55,
+  "src": "revisor 5/10 (nombre del archivo) +5 de cortesía (techo del corpus)",
+  "tol": 7
+ },
+ "SuzyQ/Avril3_SuzyQ_calif7": {
+  "score": 75,
+  "src": "revisor 7/10 (nombre del archivo) +5 de cortesía (techo del corpus)",
+  "tol": 7
+ },
  "SuzyQ/Avril_SItermina_bien": {
-  "score": 80,
-  "src": "revisor 8/10",
+  "score": 85,
+  "src": "revisor 8/10 +5 de cortesía (techo del corpus)",
+  "tol": 7
+ },
+ "SuzyQ/Avril_SuzyQ_calif8": {
+  "score": 85,
+  "src": "revisor 8/10 (nombre del archivo) +5 de cortesía (techo del corpus)",
   "tol": 7
  },
  "SuzyQ/Avril_muyylargo_bien": {

@@ -23,7 +23,7 @@ class CatalogPage extends ConsumerWidget {
       data: (steps) => RefreshIndicator(
         onRefresh: () async {
           ref.invalidate(catalogProvider);
-          ref.invalidate(userBestScoresProvider);
+          ref.invalidate(userStepStatsProvider);
         },
         child: ListView.separated(
           padding: const EdgeInsets.all(12),
@@ -43,7 +43,7 @@ class _StepCard extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
-    final best = ref.watch(userBestScoresProvider).value?[step.id];
+    final stats = ref.watch(userStepStatsProvider).value?[step.id];
 
     return Card(
       clipBehavior: Clip.antiAlias,
@@ -71,7 +71,10 @@ class _StepCard extends ConsumerWidget {
                     ],
                   ),
                   const SizedBox(height: 10),
-                  _ProgressBar(best: best),
+                  _ProgressBar(
+                    best: stats?.best,
+                    attempts: stats?.attempts ?? 0,
+                  ),
                 ],
               ),
             ),
@@ -119,8 +122,11 @@ class _Cover extends ConsumerWidget {
 }
 
 class _ProgressBar extends StatelessWidget {
-  const _ProgressBar({this.best});
+  const _ProgressBar({this.best, this.attempts = 0});
   final double? best;
+
+  /// Intentos evaluados de este paso (métrica de uso, se deriva de HISTORY).
+  final int attempts;
 
   @override
   Widget build(BuildContext context) {
@@ -144,7 +150,10 @@ class _ProgressBar extends StatelessWidget {
         ),
         const SizedBox(height: 4),
         Text(
-          b == null ? 'Sin intentos' : 'Mejor: ${b.toStringAsFixed(0)}%',
+          b == null
+              ? 'Sin intentos'
+              : 'Mejor: ${b.toStringAsFixed(0)}%  ·  '
+                  '$attempts ${attempts == 1 ? 'intento' : 'intentos'}',
           style: theme.textTheme.bodyMedium,
         ),
       ],

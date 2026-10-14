@@ -1,4 +1,5 @@
 import '../../domain/entities/dance_step.dart';
+import '../../domain/entities/step_stats.dart';
 import '../../domain/repositories/catalog_repository.dart';
 import '../catalog_seed.dart';
 import '../datasources/catalog_remote_data_source.dart';
@@ -31,6 +32,10 @@ class CatalogRepositoryImpl implements CatalogRepository {
   @override
   Future<Map<String, double>> bestScoresForUser(String uid) =>
       _remote.bestScoresForUser(uid);
+
+  @override
+  Future<Map<String, StepStats>> statsForUser(String uid) =>
+      _remote.statsForUser(uid);
 
   @override
   Future<void> seedCatalog() => _remote.seedCatalog();

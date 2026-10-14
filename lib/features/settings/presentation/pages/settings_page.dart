@@ -80,6 +80,17 @@ class SettingsPage extends ConsumerWidget {
           onChanged: (v) =>
               controller.save(settings.copyWith(autoStartOnStill: v)),
         ),
+        // Flechas guía durante el intento (el "filtro" de cada paso).
+        SwitchListTile(
+          contentPadding: EdgeInsets.zero,
+          secondary: const Icon(Icons.navigation_outlined),
+          title: const Text('Flechas guía mientras bailo'),
+          subtitle: const Text(
+              'Marcan a dónde moverte en cada tiempo del paso. Apágalas para '
+              'bailar sin ayudas.'),
+          value: settings.showCues,
+          onChanged: (v) => controller.save(settings.copyWith(showCues: v)),
+        ),
         // Herramientas de desarrollo: solo en builds debug.
         if (kDebugMode) ...[
           const SizedBox(height: 32),

@@ -20,6 +20,7 @@ import '../../../pose/presentation/providers/pose_providers.dart';
 import '../../../pose/presentation/widgets/pose_painter.dart';
 import '../../../settings/presentation/providers/settings_providers.dart';
 import '../../domain/evaluation_feedback.dart';
+import '../../domain/step_cues.dart';
 import '../../engine/dtw_comparator.dart';
 import '../../engine/step_params.dart';
 import '../../engine/dtw_result.dart';
@@ -29,6 +30,7 @@ import '../../engine/retry_gesture_detector.dart';
 import '../../engine/start_gesture_detector.dart';
 import '../providers/evaluation_providers.dart';
 import '../widgets/arming_overlay.dart';
+import '../widgets/cue_overlay.dart';
 import '../widgets/results_sheet.dart';
 
 // La referencia se extrae con isMirrored=false; la captura en vivo se procesa
@@ -549,8 +551,8 @@ class _EvaluationPageState extends ConsumerState<EvaluationPage>
               result: result,
             );
         // Refresca la ficha del paso, el catálogo y el progreso del perfil.
-        ref.invalidate(bestScoreProvider(widget.stepId));
-        ref.invalidate(userBestScoresProvider);
+        // Un solo provider raíz: de él cuelgan mejor marca e intentos.
+        ref.invalidate(userStepStatsProvider);
       } catch (_) {
         // Sin red: el intento se mostrará igual; sync queda para Fase 7.
       }
@@ -684,6 +686,14 @@ class _EvaluationPageState extends ConsumerState<EvaluationPage>
             painter: PosePainter(frames: _frames, isFront: isFront),
           ),
         ),
+        // Flechas guía del paso, sincronizadas con el reloj de la captura.
+        if (_phase == _Phase.capturing &&
+            ref.watch(currentSettingsProvider).showCues)
+          CueOverlay(
+            clock: _captureClock,
+            cues: cuesFor(widget.stepId),
+            mirrored: isFront,
+          ),
         if (_phase == _Phase.capturing)
           Align(
             alignment: Alignment.topCenter,
