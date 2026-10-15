@@ -101,6 +101,10 @@ class _EvaluationPageState extends ConsumerState<EvaluationPage>
   /// el reloj aún marca cero.
   int _captureToken = 0;
 
+  /// El permiso de cámara está denegado para siempre (iOS tras un "No", o
+  /// restringido por control parental): solo se recupera desde Ajustes.
+  bool _permanentlyDenied = false;
+
   /// Durante el armado no hace falta inferir a 30 fps: el detector trabaja por
   /// tiempo, no por fotogramas. Procesar 1 de cada 2 baja a la mitad el consumo
   /// en una espera que puede durar minutos.
@@ -206,9 +210,18 @@ class _EvaluationPageState extends ConsumerState<EvaluationPage>
   }
 
   Future<void> _init() async {
-    final granted = await Permission.camera.request();
-    if (!granted.isGranted) {
-      if (mounted) setState(() => _phase = _Phase.denied);
+    final status = await Permission.camera.request();
+    if (!status.isGranted) {
+      // iOS solo pregunta UNA vez por instalación: si ya se dijo que no, la
+      // única salida es Ajustes. Mientras siga en "denied" (Android, o iOS
+      // antes de responder) tiene sentido volver a pedirlo desde la pantalla.
+      if (mounted) {
+        setState(() {
+          _phase = _Phase.denied;
+          _permanentlyDenied =
+              status.isPermanentlyDenied || status.isRestricted;
+        });
+      }
       return;
     }
     try {
@@ -245,6 +258,14 @@ class _EvaluationPageState extends ConsumerState<EvaluationPage>
 
   Future<void> _initCamera() async {
     final cams = await availableCameras();
+    if (cams.isEmpty) {
+      // Pasa en el simulador de iOS, que no tiene cámara: sin esto el error
+      // que salía era un "Bad state: No element" sin pistas.
+      throw StateError(Platform.isIOS
+          ? 'No hay cámara disponible. El simulador de iOS no tiene; prueba '
+              'en un iPhone real.'
+          : 'No hay cámara disponible en este dispositivo.');
+    }
     final front = cams.firstWhere(
       (c) => c.lensDirection == CameraLensDirection.front,
       orElse: () => cams.first,
@@ -645,12 +666,32 @@ class _EvaluationPageState extends ConsumerState<EvaluationPage>
           Text('Preparando referencia…'),
         ]));
       case _Phase.denied:
-        return const _Centered(
+        return _Centered(
           child: Column(mainAxisSize: MainAxisSize.min, children: [
-            Text('Permiso de cámara denegado'),
-            SizedBox(height: 12),
-            FilledButton(
-                onPressed: openAppSettings, child: Text('Abrir ajustes')),
+            const Text('Permiso de cámara denegado'),
+            const SizedBox(height: 4),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 32),
+              child: Text(
+                _permanentlyDenied
+                    ? 'Actívalo en Ajustes › BailonGO › Cámara y vuelve a '
+                        'entrar al paso.'
+                    : 'La evaluación necesita la cámara para ver tus pasos.',
+                textAlign: TextAlign.center,
+              ),
+            ),
+            const SizedBox(height: 12),
+            if (_permanentlyDenied)
+              const FilledButton(
+                  onPressed: openAppSettings, child: Text('Abrir ajustes'))
+            else
+              FilledButton(
+                onPressed: () {
+                  setState(() => _phase = _Phase.preparing);
+                  _init();
+                },
+                child: const Text('Permitir cámara'),
+              ),
           ]),
         );
       case _Phase.noVideo:

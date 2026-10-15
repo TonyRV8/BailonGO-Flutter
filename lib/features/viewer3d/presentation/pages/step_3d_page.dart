@@ -73,6 +73,11 @@ class _Step3DPageState extends State<Step3DPage> with WidgetsBindingObserver {
   CameraPreset _preset = CameraPreset.front;
   double _speed = 1;
 
+  /// Personaje elegido. Se recuerda mientras la app siga abierta (al volver a
+  /// otro paso aparece el mismo).
+  static StepCharacter _lastCharacter = StepAnimations.characters.first;
+  StepCharacter _character = _lastCharacter;
+
   // En web no hay canal JS que avise de la carga: se muestra directamente.
   bool _loaded = kIsWeb;
   bool _failed = false;
@@ -127,8 +132,32 @@ class _Step3DPageState extends State<Step3DPage> with WidgetsBindingObserver {
       _loaded = true;
       _failed = message == 'error';
     });
-    // La velocidad pudo cambiarse mientras cargaba.
+    // La velocidad (y, tras cambiar de personaje, la vista) pudo cambiarse
+    // mientras cargaba.
     if (!_failed && _speed != 1) unawaited(_viewer.setSpeed(_speed));
+    if (!_failed && _preset != CameraPreset.front) {
+      unawaited(_viewer.setCamera(_preset));
+    }
+  }
+
+  /// Cambia de personaje. El visor se recrea con el otro GLB (cada WebView de
+  /// `model_viewer_plus` sirve un solo archivo); velocidad y vista se
+  /// reaplican al cargar.
+  void _selectCharacter(StepCharacter character) {
+    if (character == _character) return;
+    _lastCharacter = character;
+    setState(() {
+      _character = character;
+      _loaded = kIsWeb;
+      _failed = false;
+    });
+    // En web el conteo no viaja en el HTML del visor: se vuelve a inyectar.
+    final beatScript = _beatScript;
+    if (kIsWeb && beatScript != null) {
+      WidgetsBinding.instance.addPostFrameCallback(
+        (_) => unawaited(_viewer.inject(beatScript)),
+      );
+    }
   }
 
   void _selectPreset(CameraPreset preset) {
@@ -163,8 +192,10 @@ class _Step3DPageState extends State<Step3DPage> with WidgetsBindingObserver {
             fit: StackFit.expand,
             children: [
               ModelViewer(
-                src: StepAnimations.modelAsset,
-                alt: 'Maniquí 3D bailando ${widget.title ?? widget.step}',
+                key: ValueKey(_character.asset),
+                src: _character.asset,
+                alt: '${_character.label} bailando '
+                    '${widget.title ?? widget.step} en 3D',
                 loading: Loading.eager,
                 backgroundColor: Colors.transparent,
                 cameraControls: true,
@@ -208,6 +239,21 @@ class _Step3DPageState extends State<Step3DPage> with WidgetsBindingObserver {
                         onBack: () => Navigator.maybePop(context),
                       ),
                     ),
+                    if (_animation != null)
+                      const Positioned(
+                        top: 72,
+                        left: 12,
+                        child: _FootLegend(),
+                      ),
+                    if (StepAnimations.characters.length > 1)
+                      Positioned(
+                        top: 116,
+                        left: 12,
+                        child: _CharacterPicker(
+                          selected: _character,
+                          onSelected: _selectCharacter,
+                        ),
+                      ),
                     Positioned(
                       right: 12,
                       top: 0,
@@ -329,6 +375,90 @@ class _TopBar extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+/// Qué significa cada color de los cuadros del piso: el cuadro se enciende
+/// del color del pie que pisa en él (mismos colores que el GLB, ver
+/// `FOOT_RGB` en tool/anim3d/build_glb.py).
+class _FootLegend extends StatelessWidget {
+  const _FootLegend();
+
+  static const _left = Color(0xFFFF2EB8);
+  static const _right = Color(0xFFFFB020);
+
+  @override
+  Widget build(BuildContext context) {
+    final style = Theme.of(context)
+        .textTheme
+        .bodySmall
+        ?.copyWith(color: Colors.white, fontWeight: FontWeight.w600);
+    Widget item(Color color, String label) => Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 12,
+              height: 12,
+              decoration: BoxDecoration(
+                color: color,
+                borderRadius: BorderRadius.circular(3),
+              ),
+            ),
+            const SizedBox(width: 6),
+            Text(label, style: style),
+          ],
+        );
+    return _Glass(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      radius: 12,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          item(_left, 'Pie izquierdo'),
+          const SizedBox(width: 14),
+          item(_right, 'Pie derecho'),
+        ],
+      ),
+    );
+  }
+}
+
+/// Selector de personaje (ver [StepAnimations.characters]).
+class _CharacterPicker extends StatelessWidget {
+  const _CharacterPicker({required this.selected, required this.onSelected});
+
+  final StepCharacter selected;
+  final ValueChanged<StepCharacter> onSelected;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return _Glass(
+      padding: const EdgeInsets.all(4),
+      radius: 14,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          for (final c in StepAnimations.characters)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 2),
+              child: ChoiceChip(
+                label: Text(c.label),
+                selected: c == selected,
+                onSelected: (_) => onSelected(c),
+                showCheckmark: false,
+                labelStyle: theme.textTheme.labelMedium?.copyWith(
+                  color: c == selected ? null : Colors.white,
+                  fontWeight: FontWeight.w600,
+                ),
+                backgroundColor: Colors.transparent,
+                side: BorderSide(color: Colors.white.withValues(alpha: 0.4)),
+                visualDensity: VisualDensity.compact,
+              ),
+            ),
+        ],
+      ),
     );
   }
 }

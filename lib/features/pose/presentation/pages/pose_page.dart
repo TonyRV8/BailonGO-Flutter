@@ -40,6 +40,9 @@ class _PosePageState extends ConsumerState<PosePage>
   DateTime? _lowConfSince;
   bool _bodyInvalid = false;
 
+  /// Permiso denegado para siempre: solo se recupera desde Ajustes.
+  bool _permanentlyDenied = false;
+
   @override
   void initState() {
     super.initState();
@@ -48,14 +51,26 @@ class _PosePageState extends ConsumerState<PosePage>
   }
 
   Future<void> _start() async {
-    final granted = await Permission.camera.request();
-    if (!granted.isGranted) {
-      if (mounted) setState(() => _status = _Status.denied);
+    final status = await Permission.camera.request();
+    if (!status.isGranted) {
+      if (mounted) {
+        setState(() {
+          _status = _Status.denied;
+          _permanentlyDenied =
+              status.isPermanentlyDenied || status.isRestricted;
+        });
+      }
       return;
     }
 
     try {
       final cams = await availableCameras();
+      if (cams.isEmpty) {
+        throw StateError(Platform.isIOS
+            ? 'No hay cámara disponible. El simulador de iOS no tiene; prueba '
+                'en un iPhone real.'
+            : 'No hay cámara disponible en este dispositivo.');
+      }
       final front = cams.firstWhere(
         (c) => c.lensDirection == CameraLensDirection.front,
         orElse: () => cams.first,
@@ -167,14 +182,25 @@ class _PosePageState extends ConsumerState<PosePage>
       case _Status.initializing:
         return const Center(child: CircularProgressIndicator());
       case _Status.denied:
-        return const _Message(
+        // iOS solo pregunta una vez: si ya se denegó, hay que ir a Ajustes.
+        return _Message(
           icon: Icons.no_photography_outlined,
           title: 'Permiso de cámara denegado',
-          subtitle: 'Actívalo para usar la evaluación.',
-          action: FilledButton(
-            onPressed: openAppSettings,
-            child: Text('Abrir ajustes'),
-          ),
+          subtitle: _permanentlyDenied
+              ? 'Actívalo en Ajustes › BailonGO › Cámara.'
+              : 'Actívalo para usar la evaluación.',
+          action: _permanentlyDenied
+              ? const FilledButton(
+                  onPressed: openAppSettings,
+                  child: Text('Abrir ajustes'),
+                )
+              : FilledButton(
+                  onPressed: () {
+                    setState(() => _status = _Status.initializing);
+                    _start();
+                  },
+                  child: const Text('Permitir cámara'),
+                ),
         );
       case _Status.error:
         return _Message(

@@ -93,3 +93,6 @@ Thumbs.db
 /tool/landmarks.json
 /tool/landmarks_revisados.json
 /tool/__pycache__/
+
+# Visor 3D: modelo MediaPipe heavy (se descarga solo, ver tool/anim3d/extract_world.py)
+tool/anim3d/pose_landmarker_heavy.task

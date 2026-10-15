@@ -39,8 +39,39 @@ target 'Runner' do
   end
 end
 
+# permission_handler_apple compila CADA permiso detrás de una macro. Si no se
+# definen aquí, su implementación de cámara se sustituye por un stub que SIEMPRE
+# devuelve "denied" sin llegar a preguntar: ese era el "Permiso de cámara
+# denegado" del módulo de evaluación en iPhone. Solo se activa el que usa la
+# app; los demás van a 0 para no declarar APIs que no se usan ante App Store.
+PERMISSION_MACROS = [
+  '$(inherited)',
+  'PERMISSION_CAMERA=1',
+  'PERMISSION_EVENTS=0',
+  'PERMISSION_EVENTS_FULL_ACCESS=0',
+  'PERMISSION_REMINDERS=0',
+  'PERMISSION_CONTACTS=0',
+  'PERMISSION_MICROPHONE=0',
+  'PERMISSION_SPEECH_RECOGNIZER=0',
+  'PERMISSION_PHOTOS=0',
+  'PERMISSION_LOCATION=0',
+  'PERMISSION_NOTIFICATIONS=0',
+  'PERMISSION_MEDIA_LIBRARY=0',
+  'PERMISSION_SENSORS=0',
+  'PERMISSION_BLUETOOTH=0',
+  'PERMISSION_APP_TRACKING_TRANSPARENCY=0',
+  'PERMISSION_CRITICAL_ALERTS=0',
+  'PERMISSION_ASSISTANT=0',
+].freeze
+
 post_install do |installer|
   installer.pods_project.targets.each do |target|
     flutter_additional_ios_build_settings(target)
+    target.build_configurations.each do |config|
+      existing = config.build_settings['GCC_PREPROCESSOR_DEFINITIONS'] || ['$(inherited)']
+      existing = [existing] unless existing.is_a?(Array)
+      config.build_settings['GCC_PREPROCESSOR_DEFINITIONS'] =
+        (existing + PERMISSION_MACROS).uniq
+    end
   end
 end

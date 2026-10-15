@@ -67,7 +67,8 @@ class BeatCounter {
         mv.__bgBeat = true;
         var last = -1, raf = 0;
         function show(b) {
-          el.textContent = b + 1;
+          // Los ciclos de 16 tiempos (dos frases) se cuentan 1…8, 1…8.
+          el.textContent = (b % 8) + 1;
           el.classList.toggle('accent', b % 4 === 0);
           if (el.animate) {
             el.animate(

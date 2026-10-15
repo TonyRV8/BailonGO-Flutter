@@ -1,12 +1,18 @@
-/// Mapeo paso → animación ("action") del maniquí 3D `assets/models/DanceGrid1.glb`.
+/// Mapeo paso → animación ("action") de los personajes 3D ([characters]).
 ///
-/// El GLB trae 9 animaciones, una por paso WSF Bronce. La pantalla 3D recibe el
+/// Cada GLB trae 9 animaciones, una por paso WSF Bronce. La pantalla 3D recibe el
 /// paso como texto libre (id del catálogo, nombre visible o un alias como
 /// "basico" / "right spot turn") y aquí se resuelve a la animación exacta.
 class StepAnimations {
   StepAnimations._();
 
   static const String modelAsset = 'assets/models/DanceGrid1.glb';
+
+  /// Personajes disponibles; el primero es el que se muestra por defecto.
+  static const List<StepCharacter> characters = [
+    StepCharacter('Claire', 'assets/models/Claire.glb'),
+    StepCharacter('Maniquí', modelAsset),
+  ];
 
   static const String basico = 'basico_3d';
   static const String guapeo = 'guapeo_3d';
@@ -38,9 +44,17 @@ class StepAnimations {
   /// flota sobre el maniquí avanza cada `duración / tiempos` segundos, así que
   /// basta con esto para que vaya a ritmo (y sigue al slider de velocidad,
   /// porque se calcula sobre el tiempo de la animación, no sobre el reloj).
-  /// Los pasos de salsa son una frase de 8 tiempos; si alguna animación se
-  /// regraba con otra longitud, se ajusta aquí.
-  static const Map<String, int> _beatsPerLoop = {};
+  /// Los pasos de salsa son una frase de 8 tiempos; los que necesitan dos
+  /// frases para cerrar el ciclo (p. ej. la vuelta) duran 16. Sale de
+  /// `tool/anim3d/process.py` (campo `beats` de clean.json): si se regeneran
+  /// las animaciones, se ajusta aquí.
+  static const Map<String, int> _beatsPerLoop = {
+    cucaracha: 16,
+    vuelta: 16,
+    cumbia: 16,
+    toeHeel: 16,
+    kickFlick: 16,
+  };
   static const int defaultBeatsPerLoop = 8;
 
   static int beatsFor(String animation) =>
@@ -121,4 +135,13 @@ class StepAnimations {
         .replaceAll(RegExp(r'[^a-z0-9]+'), '_')
         .replaceAll(RegExp(r'^_+|_+$'), '');
   }
+}
+
+/// Personaje que baila en el visor 3D. Cada uno es un GLB con las mismas 9
+/// animaciones y la misma pista (ver `tool/anim3d/build.py`).
+class StepCharacter {
+  const StepCharacter(this.label, this.asset);
+
+  final String label;
+  final String asset;
 }
