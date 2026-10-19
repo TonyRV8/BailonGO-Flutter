@@ -12,6 +12,7 @@ import '../../../evaluation/engine/dtw_result.dart';
 import '../../../evaluation/engine/step_params.dart';
 import '../../../evaluation/presentation/providers/evaluation_providers.dart';
 import '../../../evaluation/presentation/widgets/reset_progress.dart';
+import '../../../tutorial/presentation/pages/tutorial_page.dart';
 import '../providers/settings_providers.dart';
 
 /// Configuración (RF-01): preferencias del usuario persistidas en
@@ -90,6 +91,18 @@ class SettingsPage extends ConsumerWidget {
               'bailar sin ayudas.'),
           value: settings.showCues,
           onChanged: (v) => controller.save(settings.copyWith(showCues: v)),
+        ),
+        // Tutorial de uso: se muestra solo antes de la primera evaluación;
+        // aquí se puede volver a ver cuando se quiera.
+        ListTile(
+          contentPadding: EdgeInsets.zero,
+          leading: const Icon(Icons.help_outline),
+          title: const Text('Ver tutorial de la evaluación'),
+          subtitle: const Text(
+              'Cómo colocar el teléfono y los gestos para iniciar y '
+              'reintentar.'),
+          onTap: () => Navigator.of(context, rootNavigator: true)
+              .push(TutorialPage.route()),
         ),
         // Herramientas de desarrollo: solo en builds debug.
         if (kDebugMode) ...[

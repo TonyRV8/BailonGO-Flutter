@@ -57,13 +57,13 @@ class _CueOverlayState extends State<CueOverlay>
     super.dispose();
   }
 
-  /// Señal activa en [ms]: desde [kCueLeadMs] antes de su tiempo hasta que
-  /// termina. Si dos se solapan gana la que empieza más tarde (la siguiente
-  /// figura manda sobre la que ya se está acabando).
+  /// Señal activa en [ms]: de "Mostrar" hasta su fin. Si dos se solapan gana
+  /// la que empieza más tarde (la siguiente figura manda sobre la que ya se
+  /// está acabando).
   StepCue? _activeAt(int ms) {
     StepCue? found;
     for (final cue in widget.cues) {
-      if (ms >= cue.tMs - kCueLeadMs && ms < cue.endMs) found = cue;
+      if (ms >= cue.showMs && ms < cue.endMs) found = cue;
     }
     return found;
   }
@@ -78,7 +78,10 @@ class _CueOverlayState extends State<CueOverlay>
             final cue = _activeAt(ms);
             if (cue == null) return const SizedBox.expand();
             return _CueArrow(
+              // Con cámara trasera se voltea la flecha; el texto no, porque
+              // DER/IZQ hablan del cuerpo.
               dir: widget.mirrored ? cue.dir : _flip(cue.dir),
+              label: cue.label,
               // 0 al aparecer, 1 en el tiempo marcado, >1 mientras dura.
               phase: (ms - cue.tMs + kCueLeadMs) / kCueLeadMs,
               fade: _fade(ms, cue),
@@ -89,36 +92,43 @@ class _CueOverlayState extends State<CueOverlay>
     );
   }
 
-  /// Entra en los primeros 200 ms y se apaga en los últimos 250 ms.
+  /// Entra en los primeros 150 ms y se apaga en los últimos 150 ms.
   double _fade(int ms, StepCue cue) {
-    final since = ms - (cue.tMs - kCueLeadMs);
+    final since = ms - cue.showMs;
     final toEnd = cue.endMs - ms;
     return math.min(
-      (since / 200).clamp(0.0, 1.0),
-      (toEnd / 250).clamp(0.0, 1.0),
+      (since / 150).clamp(0.0, 1.0),
+      (toEnd / 150).clamp(0.0, 1.0),
     );
   }
 
   static CueDir _flip(CueDir d) => switch (d) {
         CueDir.left => CueDir.right,
         CueDir.right => CueDir.left,
+        CueDir.upLeft => CueDir.upRight,
+        CueDir.upRight => CueDir.upLeft,
+        CueDir.downLeft => CueDir.downRight,
+        CueDir.downRight => CueDir.downLeft,
         CueDir.turnLeft => CueDir.turnRight,
         CueDir.turnRight => CueDir.turnLeft,
         _ => d,
       };
 }
 
-/// Una flecha con su etiqueta, colocada en el borde al que hay que moverse.
-/// La palabra va siempre: una flecha hacia abajo sola no distingue "acércate"
-/// de "agáchate".
+/// Una flecha con su etiqueta. Las laterales y diagonales van en el borde al
+/// que hay que moverse; adelante/atrás arriba al centro, lejos de los pies, y
+/// los giros al centro. La palabra va siempre: la flecha sola no distingue
+/// ADEL DER de PATADA ADELANTE.
 class _CueArrow extends StatelessWidget {
   const _CueArrow({
     required this.dir,
+    required this.label,
     required this.phase,
     required this.fade,
   });
 
   final CueDir dir;
+  final String label;
 
   /// 0 al aparecer, 1 justo en el tiempo de la señal.
   final double phase;
@@ -126,22 +136,19 @@ class _CueArrow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final (icon, label, align) = switch (dir) {
-      CueDir.left => (Icons.arrow_back, 'IZQUIERDA', Alignment.centerLeft),
-      CueDir.right => (Icons.arrow_forward, 'DERECHA', Alignment.centerRight),
-      CueDir.forward => (
-          Icons.keyboard_double_arrow_down,
-          'ADELANTE',
-          Alignment.bottomCenter,
-        ),
-      CueDir.back => (
-          Icons.keyboard_double_arrow_up,
-          'ATRÁS',
-          Alignment.topCenter,
-        ),
-      CueDir.turnRight => (Icons.rotate_right, 'VUELTA', Alignment.center),
-      CueDir.turnLeft => (Icons.rotate_left, 'VUELTA', Alignment.center),
-      CueDir.up => (Icons.arrow_upward, 'PATADA', Alignment.bottomCenter),
+    const top = Alignment(0, -0.62);
+    final (icon, align) = switch (dir) {
+      CueDir.forward => (Icons.arrow_upward, top),
+      CueDir.back => (Icons.arrow_downward, top),
+      CueDir.right => (Icons.arrow_forward, Alignment.centerRight),
+      CueDir.left => (Icons.arrow_back, Alignment.centerLeft),
+      CueDir.upRight => (Icons.north_east, const Alignment(1, -0.45)),
+      CueDir.upLeft => (Icons.north_west, const Alignment(-1, -0.45)),
+      CueDir.downRight => (Icons.south_east, const Alignment(1, 0.2)),
+      CueDir.downLeft => (Icons.south_west, const Alignment(-1, 0.2)),
+      CueDir.turnRight => (Icons.rotate_right, Alignment.center),
+      CueDir.turnLeft => (Icons.rotate_left, Alignment.center),
+      CueDir.close => (Icons.circle, top),
     };
 
     // Antes del tiempo marcado la flecha se desliza hacia su borde; al llegar
@@ -153,9 +160,13 @@ class _CueArrow extends StatelessWidget {
     final offset = switch (dir) {
       CueDir.left => Offset(slide, 0),
       CueDir.right => Offset(-slide, 0),
-      CueDir.forward || CueDir.up => Offset(0, -slide),
-      CueDir.back => Offset(0, slide),
-      CueDir.turnRight || CueDir.turnLeft => Offset.zero,
+      CueDir.upLeft => Offset(slide, slide) * 0.7,
+      CueDir.upRight => Offset(-slide, slide) * 0.7,
+      CueDir.downLeft => Offset(slide, -slide) * 0.7,
+      CueDir.downRight => Offset(-slide, -slide) * 0.7,
+      CueDir.forward => Offset(0, slide),
+      CueDir.back => Offset(0, -slide),
+      _ => Offset.zero,
     };
 
     // Tamaño relativo a la pantalla: la flecha tiene que leerse a varios
@@ -179,7 +190,8 @@ class _CueArrow extends StatelessWidget {
                 children: [
                   Icon(
                     icon,
-                    size: size,
+                    // El punto de CIERRA lleno a tamaño completo tapa demasiado.
+                    size: dir == CueDir.close ? size * 0.45 : size,
                     color: Colors.white,
                     shadows: const [
                       Shadow(blurRadius: 22, color: Colors.black87),
@@ -188,11 +200,11 @@ class _CueArrow extends StatelessWidget {
                   ),
                   const SizedBox(height: 6),
                   Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 14, vertical: 6),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
                     decoration: BoxDecoration(
-                      color: Colors.black.withValues(
-                          alpha: lerpDouble(0, 0.55, fade)!),
+                      color: Colors.black
+                          .withValues(alpha: lerpDouble(0, 0.55, fade)!),
                       borderRadius: BorderRadius.circular(999),
                     ),
                     child: Text(
