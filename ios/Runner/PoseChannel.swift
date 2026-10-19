@@ -112,6 +112,12 @@ final class PoseChannel: NSObject, FlutterPlugin {
       closeLandmarker()
       result(nil)
 
+    case "keepScreenOn":
+      // Durante la evaluación el usuario baila lejos del teléfono sin tocarlo:
+      // sin esto iOS oscurece y bloquea la pantalla a media toma.
+      UIApplication.shared.isIdleTimerDisabled = args?["on"] as? Bool ?? false
+      result(nil)
+
     default:
       result(FlutterMethodNotImplemented)
     }

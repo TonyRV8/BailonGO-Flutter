@@ -3,6 +3,7 @@ package com.bailongo.bailongo
 import android.graphics.Bitmap
 import android.media.MediaMetadataRetriever
 import android.os.SystemClock
+import android.view.WindowManager
 import com.google.mediapipe.framework.image.BitmapImageBuilder
 import com.google.mediapipe.tasks.core.BaseOptions
 import com.google.mediapipe.tasks.core.Delegate
@@ -127,6 +128,17 @@ class MainActivity : FlutterActivity() {
                     }
                     "close" -> {
                         closeLandmarker()
+                        result.success(null)
+                    }
+                    "keepScreenOn" -> {
+                        // Durante la evaluación el usuario baila lejos del
+                        // teléfono sin tocarlo: sin esto algunos equipos
+                        // oscurecen o bloquean la pantalla a media toma.
+                        if (call.argument<Boolean>("on") == true) {
+                            window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+                        } else {
+                            window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+                        }
                         result.success(null)
                     }
                     else -> result.notImplemented()

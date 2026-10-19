@@ -10,6 +10,7 @@ import 'package:go_router/go_router.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 import '../../../../core/config/app_constants.dart';
+import '../../../../core/utils/screen_awake.dart';
 import '../../../auth/presentation/providers/auth_providers.dart';
 import '../../../catalog/domain/entities/dance_step.dart';
 import '../../../catalog/domain/step_weights.dart';
@@ -174,6 +175,8 @@ class _EvaluationPageState extends ConsumerState<EvaluationPage>
       vsync: this,
       duration: const Duration(milliseconds: 900),
     );
+    // Se baila lejos del teléfono sin tocarlo: que no se apague la pantalla.
+    keepScreenOn(true);
     _initAudio();
     _init();
   }
@@ -645,6 +648,7 @@ class _EvaluationPageState extends ConsumerState<EvaluationPage>
     _tickPlayer.dispose();
     _goPlayer.dispose();
     _controller?.dispose();
+    keepScreenOn(false);
     super.dispose();
   }
 
