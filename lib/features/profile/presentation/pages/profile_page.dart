@@ -13,6 +13,7 @@ import '../../../catalog/domain/entities/step_stats.dart';
 import '../../../catalog/presentation/providers/catalog_providers.dart';
 import '../../../settings/presentation/providers/settings_providers.dart';
 import '../providers/profile_providers.dart';
+import '../widgets/edit_name_dialog.dart';
 
 /// Perfil + progreso (RF-02, RF-03, RF-04).
 class ProfilePage extends ConsumerWidget {
@@ -53,30 +54,11 @@ class _Header extends ConsumerWidget {
   final AppUser user;
 
   Future<void> _editName(BuildContext context, WidgetRef ref) async {
-    final controller = TextEditingController(text: user.nombre ?? '');
     final messenger = ScaffoldMessenger.of(context);
-    final nombre = await showDialog<String>(
-      context: context,
-      builder: (dialogCtx) => AlertDialog(
-        title: const Text('Editar nombre'),
-        content: TextField(
-          controller: controller,
-          autofocus: true,
-          decoration: const InputDecoration(labelText: 'Nombre'),
-        ),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(dialogCtx),
-              child: const Text('Cancelar')),
-          FilledButton(
-              onPressed: () =>
-                  Navigator.pop(dialogCtx, controller.text.trim()),
-              child: const Text('Guardar')),
-        ],
-      ),
-    );
-    controller.dispose();
-    if (nombre == null || nombre.isEmpty) return;
+    final nombre =
+        await EditNameDialog.show(context, initial: user.nombre ?? '');
+    // Sin cambios no hay nada que guardar (ni que recargar).
+    if (nombre == null || nombre.isEmpty || nombre == user.nombre) return;
     try {
       await ref.read(profileControllerProvider.notifier).updateName(nombre);
       messenger.showSnackBar(const SnackBar(content: Text('Nombre actualizado.')));
