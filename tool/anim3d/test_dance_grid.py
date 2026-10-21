@@ -6,7 +6,12 @@ import unittest
 
 import numpy as np
 
-from dance_grid import CELL, CENTER, COVER, GAP, FEET, circular_runs, plan_guide
+from dance_grid import (CELL, CENTER, COVER, GAP, FEET, STEP_CONTACTS, STEP_GRIDS,
+                        STEP_MIRRORS, STEP_OVERRIDES, STEP_SOLID_CELLS,
+                        circular_runs,
+                        plan_guide, step_contacts)
+
+from foot_pitch import FOOT_LENGTH, STEP_HEIGHT_PITCH, TAP_LIMIT, height_pitch, tap_pitch
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -71,6 +76,49 @@ class GuideTests(unittest.TestCase):
         guide = plan_guide(joints, 24, contacts)
         np.testing.assert_array_equal(guide.assignments["L"][8:16], -1)
         self.assert_lit(guide, contacts)
+
+    def test_overrides_light_darken_or_move_a_support(self):
+        joints, contacts = self.fixture()
+        contacts["R"][8:12] = False
+        plain = plan_guide(joints, 24, contacts)
+        overrides = (("R", 8, 11, (0, 1)), ("L", 0, 3, None), ("L", 4, 5, (1, 0)))
+        guide = plan_guide(joints, 24, contacts, overrides=overrides)
+        np.testing.assert_allclose(guide.centers, plain.centers)
+        np.testing.assert_array_equal(guide.assignments["R"][8:12], 3)
+        np.testing.assert_array_equal(guide.assignments["L"][0:4], -1)
+        np.testing.assert_array_equal(guide.assignments["L"][4:6], 1)
+        np.testing.assert_array_equal(guide.assignments["L"][6:], plain.assignments["L"][6:])
+
+    def test_mirror_copies_one_half_onto_the_other_foot_and_side(self):
+        joints, contacts = self.fixture()
+        contacts["R"][:] = False
+        joints[:, (29, 31), 0] = -(CELL + GAP)
+        guide = plan_guide(joints, 24, contacts, mirror=(0, 5, 12))
+        np.testing.assert_array_equal(guide.assignments["L"][0:6], 2)
+        np.testing.assert_array_equal(guide.assignments["R"][12:18], 1)
+        np.testing.assert_array_equal(guide.assignments["L"][12:18], -1)
+        np.testing.assert_array_equal(guide.assignments["R"][0:12], -1)
+
+    def test_bigger_cells_scale_the_whole_grid(self):
+        joints, contacts = self.fixture()
+        plain = plan_guide(joints, 24, contacts)
+        big = plan_guide(joints, 24, contacts, cell_scale=1.3)
+        self.assertAlmostEqual(big.cell_size, CELL * 1.3)
+        np.testing.assert_allclose(big.centers - big.centers[0],
+                                   (plain.centers - plain.centers[0]) * 1.3)
+
+    def test_square_layout_keeps_the_four_corners(self):
+        joints, contacts = self.fixture()
+        guide = plan_guide(joints, 24, contacts, square=True)
+        pitch = CELL + GAP
+        cells = {tuple(np.rint((c - guide.centers[0]) / pitch).astype(int))
+                 for c in guide.centers}
+        self.assertEqual(cells, {(x, y) for x in (-1, 0, 1) for y in (-1, 0, 1)})
+
+    def test_override_to_a_missing_cell_fails_loudly(self):
+        joints, contacts = self.fixture()
+        with self.assertRaises(ValueError):
+            plan_guide(joints, 24, contacts, overrides=(("L", 0, 3, (2, 2)),))
 
     def test_no_contacts_means_no_distracting_grid(self):
         joints, contacts = self.fixture()
@@ -194,6 +242,137 @@ class GuideTests(unittest.TestCase):
                                                  COVER + 1e-9)
 
 
+class FootPitchTests(unittest.TestCase):
+    def test_pitch_follows_heel_and_toe_heights(self):
+        heel = np.array([0.0, 0.05, 0.0, 0.0])
+        toe = np.array([0.0, 0.0, 0.05, 0.4])
+        np.testing.assert_allclose(height_pitch(heel, toe, 0.2),
+                                   [0.0, -14.4775, 14.4775, 90.0], atol=1e-3)
+
+    def test_tap_pitch_makes_taps_visible_and_keeps_flat_feet_flat(self):
+        heel = np.array([0.0, 0.003, 0.07, 0.0, 0.0])
+        toe = np.array([0.0, 0.0, 0.0, 0.07, 0.2])
+        pitch = tap_pitch(heel, toe, 0.2)
+        self.assertEqual(pitch[0], 0.0)
+        self.assertEqual(pitch[1], 0.0)
+        self.assertLess(pitch[2], -40)
+        self.assertGreater(pitch[3], 40)
+        self.assertEqual(pitch[4], TAP_LIMIT)
+
+    def test_toeheel_follows_the_landmark_heights(self):
+        step = json.loads((ROOT / "tool/anim3d/clean.json").read_text())["toeheel_3d"]
+        joints = np.asarray(step["joints"])
+        self.assertEqual(STEP_HEIGHT_PITCH, {"toeheel_3d"})
+        for foot, heel, toe in FEET:
+            dz = joints[:, toe, 2] - joints[:, heel, 2]
+            pitch = tap_pitch(joints[:, heel, 2], joints[:, toe, 2], FOOT_LENGTH)
+            clear = np.abs(dz) > 0.015
+            self.assertGreaterEqual(np.mean(np.sign(pitch[clear]) == np.sign(dz[clear])), 0.99)
+
+
+class StepOverrideTests(unittest.TestCase):
+    def test_cumbia_lights_match_the_taught_step(self):
+        step = json.loads((ROOT / "tool/anim3d/clean.json").read_text())["cumbia_3d"]
+        joints = np.asarray(step["joints"])
+        contacts = {foot: step["contact_" + foot] for foot, _, _ in FEET}
+        grid = STEP_GRIDS["cumbia_3d"]
+        guide = plan_guide(joints, len(joints), contacts,
+                           mirror=STEP_MIRRORS["cumbia_3d"], **grid)
+        pitch = (CELL + GAP) * grid["cell_scale"]
+        cells = [tuple(np.rint((c - guide.centers[0]) / pitch).astype(int))
+                 for c in guide.centers]
+        index = {cell: i for i, cell in enumerate(cells)}
+        # Left foot between its back taps belongs to the center cell.
+        np.testing.assert_array_equal(guide.assignments["L"][33:44], CENTER)
+        # The right foot's back reach ends inside the back corner it lights.
+        right = foot_positions(joints, "R")
+        for t in list(range(95, 102)) + list(range(133, 140)):
+            self.assertEqual(guide.assignments["R"][t], index[(1, 1)])
+            self.assertLessEqual(np.abs(right[t] - guide.centers[index[(1, 1)]]).max(),
+                                 guide.cell_size / 2)
+        # The model's left half repeats its right half, 80 frames later.
+        first, last, shift = STEP_MIRRORS["cumbia_3d"]
+        for t in range(first, last + 1):
+            for foot, other in (("L", "R"), ("R", "L")):
+                source = guide.assignments[foot][t]
+                expected = -1 if source < 0 else index[(-cells[source][0], cells[source][1])]
+                self.assertEqual(guide.assignments[other][t + shift], expected, (foot, t))
+
+    def test_vuelta_left_foot_plants_its_back_steps(self):
+        step = json.loads((ROOT / "tool/anim3d/clean.json").read_text())["vuelta_3d"]
+        joints = np.asarray(step["joints"])
+        contacts = step_contacts("vuelta_3d",
+                                 {foot: step["contact_" + foot] for foot, _, _ in FEET})
+        guide = plan_guide(joints, len(joints), contacts,
+                           overrides=STEP_OVERRIDES["vuelta_3d"], **STEP_GRIDS["vuelta_3d"])
+        pitch = (CELL + GAP) * STEP_GRIDS["vuelta_3d"]["cell_scale"]
+        cells = [tuple(np.rint((c - guide.centers[0]) / pitch).astype(int))
+                 for c in guide.centers]
+        # Before the turn the right foot stays inside the center, never
+        # grazing the model's right cell.
+        side = cells.index((-1, 0))
+        self.assertFalse(np.any(guide.assignments["R"] == side))
+        self.assertFalse(np.any(guide.assignments["L"] == side))
+        left = foot_positions(joints, "L")
+        for t in range(42, 55):
+            cell = guide.assignments["L"][t]
+            self.assertEqual(cells[cell], (0, 1), t)
+            self.assertLessEqual(np.abs(left[t] - guide.centers[cell]).max(),
+                                 guide.cell_size / 2, t)
+        # After the turn the left foot still plants back, but stays dark.
+        self.assertTrue(all(contacts["L"][120:135]))
+        np.testing.assert_array_equal(guide.assignments["L"][120:135], -1)
+
+    def test_cuban_uses_a_bigger_cross_with_every_support_inside(self):
+        step = json.loads((ROOT / "tool/anim3d/clean.json").read_text())["cuban_3d"]
+        joints = np.asarray(step["joints"])
+        contacts = {foot: step["contact_" + foot] for foot, _, _ in FEET}
+        plain = plan_guide(joints, len(joints), contacts)
+        guide = plan_guide(joints, len(joints), contacts, **STEP_GRIDS["cuban_3d"])
+        self.assertAlmostEqual(guide.cell_size, CELL * 1.3)
+        self.assertEqual(len(guide.centers), 5)
+        for foot in contacts:
+            np.testing.assert_array_equal(guide.assignments[foot], plain.assignments[foot])
+            for t in np.flatnonzero(contacts[foot]):
+                where = foot_positions(joints, foot)[t]
+                cell = guide.centers[guide.assignments[foot][t]]
+                self.assertLessEqual(np.abs(where - cell).max(), guide.cell_size / 2)
+
+    def test_toeheel_bigger_cross_without_the_side_graze(self):
+        step = json.loads((ROOT / "tool/anim3d/clean.json").read_text())["toeheel_3d"]
+        joints = np.asarray(step["joints"])
+        contacts = {foot: step["contact_" + foot] for foot, _, _ in FEET}
+        guide = plan_guide(joints, len(joints), contacts,
+                           overrides=STEP_OVERRIDES["toeheel_3d"], **STEP_GRIDS["toeheel_3d"])
+        self.assertAlmostEqual(guide.cell_size, CELL * 1.3)
+        pitch = (CELL + GAP) * 1.3
+        cells = [tuple(np.rint((c - guide.centers[0]) / pitch).astype(int))
+                 for c in guide.centers]
+        self.assertEqual(len(cells), 5)
+        side = cells.index((-1, 0))
+        self.assertFalse(np.any(guide.assignments["R"] == side))
+        # Toe taps back with the left foot, heel taps front with the right.
+        np.testing.assert_array_equal(guide.assignments["L"][41:47], cells.index((0, 1)))
+        np.testing.assert_array_equal(guide.assignments["L"][151:159], cells.index((0, 1)))
+        np.testing.assert_array_equal(guide.assignments["R"][94:102], cells.index((0, -1)))
+        # Both feet share the center at once, so its halves keep both colors.
+        self.assertNotIn("toeheel_3d", STEP_SOLID_CELLS)
+
+    def test_step_contacts_add_supports_without_touching_the_data(self):
+        original = {"L": [False] * 140, "R": [True] * 140}
+        contacts = step_contacts("vuelta_3d", original)
+        self.assertTrue(all(contacts["L"][42:55]))
+        self.assertFalse(any(contacts["L"][:42]))
+        self.assertEqual(original["L"], [False] * 140)
+        self.assertIs(step_contacts("basico_3d", original)["L"], original["L"])
+
+    def test_only_cumbia_and_vuelta_are_hand_tuned_for_now(self):
+        self.assertEqual(set(STEP_OVERRIDES), {"vuelta_3d", "toeheel_3d"})
+        self.assertEqual(set(STEP_MIRRORS), {"cumbia_3d"})
+        self.assertEqual(set(STEP_GRIDS), {"cumbia_3d", "vuelta_3d", "cuban_3d", "toeheel_3d"})
+        self.assertEqual(set(STEP_CONTACTS), {"vuelta_3d"})
+
+
 def glb_document(path):
     with path.open("rb") as stream:
         magic, version, _ = struct.unpack("<III", stream.read(12))
@@ -249,13 +428,18 @@ class ExportedGridTests(unittest.TestCase):
                     step = data[animation["name"]]
                     count = step["frames"]
                     joints = np.asarray(step["joints"]) * scale
-                    contacts = {foot: step["contact_" + foot] for foot, _, _ in FEET}
-                    guide = plan_guide(joints, count, contacts, scale)
+                    contacts = step_contacts(animation["name"],
+                                             {foot: step["contact_" + foot] for foot, _, _ in FEET})
+                    guide = plan_guide(joints, count, contacts, scale,
+                                       overrides=STEP_OVERRIDES.get(animation["name"], ()),
+                                       mirror=STEP_MIRRORS.get(animation["name"]),
+                                       **STEP_GRIDS.get(animation["name"], {}))
+                    size = guide.cell_size / (CELL * scale)
                     channels = sampled_channels(doc, binary, animation, count)
                     for cell, node in cells.items():
                         active = cell < len(guide.centers)
                         np.testing.assert_allclose(channels[(node, "scale")],
-                                                   1.0 if active else 0.001, atol=1e-6)
+                                                   size if active else 0.001, atol=1e-6)
                         if active:
                             xy = guide.centers[cell]
                             expected = np.tile((xy[0], 0, -xy[1]), (count, 1))
@@ -266,6 +450,25 @@ class ExportedGridTests(unittest.TestCase):
                             self.assertIn((pad, "translation"), channels)
                             lit = channels[(pad, "scale")][:, 1] > 0.99
                             np.testing.assert_array_equal(lit, guide.assignments[foot] == cell)
+
+
+class ExportedSolidCellTests(unittest.TestCase):
+    def test_solid_steps_light_shared_cells_in_full(self):
+        for filename in ("Claire.glb", "DanceGrid1.glb"):
+            doc, binary = glb_document(ROOT / "assets/models" / filename)
+            names = {node.get("name"): i for i, node in enumerate(doc["nodes"])}
+            for animation in doc["animations"]:
+                channels = sampled_channels(doc, binary, animation, 60)
+                pad = channels[(names["pisada_0_pie_izq"], "scale")]
+                shift = channels[(names["pisada_0_pie_izq"], "translation")]
+                solid = animation["name"] in STEP_SOLID_CELLS
+                with self.subTest(model=filename, step=animation["name"]):
+                    if solid:
+                        np.testing.assert_allclose(pad[:, 0], pad[:, 1], atol=1e-6)
+                        np.testing.assert_allclose(shift[:, 0], 0, atol=1e-6)
+
+    def test_only_cumbia_lights_shared_cells_in_full(self):
+        self.assertEqual(set(STEP_SOLID_CELLS), {"cumbia_3d"})
 
 
 if __name__ == "__main__":

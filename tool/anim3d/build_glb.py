@@ -35,7 +35,9 @@ import numpy as np
 from mathutils import Matrix, Quaternion, Vector
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from dance_grid import CELL, plan_guide
+from dance_grid import (CELL, STEP_GRIDS, STEP_MIRRORS, STEP_OVERRIDES,
+                        STEP_SOLID_CELLS, plan_guide, step_contacts)
+from foot_pitch import FOOT_LENGTH, STEP_HEIGHT_PITCH, tap_pitch
 
 argv = sys.argv[sys.argv.index("--") + 1:]
 BASE, CLEAN, OUT = argv[0], argv[1], argv[2]
@@ -416,7 +418,7 @@ class StepCtx:
     MediaPipe, orientación de rodillas y pies ya filtrada en el tiempo y
     cuánto bajar la cadera."""
 
-    def __init__(self, J_all, data):
+    def __init__(self, J_all, data, by_height=False):
         self.N = len(J_all)
         lat_p = J_all[:, HIP_L] - J_all[:, HIP_R]
         lat_s = J_all[:, SH_L] - J_all[:, SH_R]
@@ -457,10 +459,17 @@ class StepCtx:
             # un sesgo enorme (el pie "apunta" 20-50° abajo aunque esté plano:
             # parecía caminar de puntas). Solo cuenta la desviación clara
             # respecto a su valor típico en apoyo (punta-talón de verdad).
-            base = np.median(pitch[c]) if c.any() else np.median(pitch)
-            rel = circ_smooth(pitch - base, 2.5)
-            mag = np.maximum(np.abs(rel) - FOOT_PITCH_DEAD, 0.0)
-            rel = np.clip(np.sign(rel) * mag, -FOOT_PITCH_DOWN, FOOT_PITCH_UP)
+            if by_height:
+                # Punta-talón: la inclinación sale de las alturas de talón y
+                # punta (fiables), no del largo horizontal del pie (aplastado),
+                # y se exagera para que el toque se note.
+                rel = circ_smooth(tap_pitch(J_all[:, he, 2], J_all[:, to, 2],
+                                            FOOT_LENGTH * SCALE), 2.5)
+            else:
+                base = np.median(pitch[c]) if c.any() else np.median(pitch)
+                rel = circ_smooth(pitch - base, 2.5)
+                mag = np.maximum(np.abs(rel) - FOOT_PITCH_DEAD, 0.0)
+                rel = np.clip(np.sign(rel) * mag, -FOOT_PITCH_DOWN, FOOT_PITCH_UP)
             self.foot_pitch[s] = rel
             self.knee_yaw[s] = circ_smooth(k_yaw, 2.0)
             f_yaw = circ_smooth(f_yaw, 2.0)
@@ -738,7 +747,11 @@ def bake_step(name, data):
     P = len(J_all)
     # Fotograma P = fotograma 0: el bucle cierra sin salto.
     J_all = np.concatenate([J_all, J_all[:1]], axis=0)
-    ctx = StepCtx(J_all, data)
+    ctx = StepCtx(J_all, data, by_height=name in STEP_HEIGHT_PITCH)
+    # Apoyos agregados a mano: solo bajan el pie al piso y encienden la
+    # casilla; la inclinación del pie ya se calculó con los apoyos grabados.
+    extra = step_contacts(name, {s: list(ctx.contact[s][:P]) for s in ("L", "R")})
+    ctx.contact = {s: np.array(extra[s] + extra[s][:1], bool) for s in ("L", "R")}
     J_all = ground_ankles(J_all, ctx)
     # Pasada 1: cuánto hay que bajar la cadera en cada fotograma; se suaviza
     # (sin quedar por debajo de lo necesario) para que no dé tirones.
@@ -859,6 +872,10 @@ def build_grid(count, cell_size):
 
 def bake_guide(name, guide, P, cells, pads):
     """El plano no se mueve dentro del clip; las luces siguen los apoyos."""
+    # Algunos pasos usan casillas más grandes: se escala la casilla y sus
+    # pisadas (hijas de ella) la heredan, con medidas locales sin escalar.
+    size = guide.cell_size / (CELL * SCALE)
+    local_cell = CELL * SCALE
     for index, ob in cells.items():
         used = index < len(guide.centers)
         xy = guide.centers[index] if used else (0, 0)
@@ -866,7 +883,7 @@ def bake_guide(name, guide, P, cells, pads):
         vals = {("location", 0): [float(xy[0])] * (P + 1),
                 ("location", 1): [float(xy[1])] * (P + 1),
                 ("location", 2): [0.0] * (P + 1)}
-        vals.update({("scale", axis): [1.0 if used else 0.001] * (P + 1)
+        vals.update({("scale", axis): [size if used else 0.001] * (P + 1)
                      for axis in range(3)})
         set_keys(act, vals)
         push_nla(ob, act, name)
@@ -879,11 +896,11 @@ def bake_guide(name, guide, P, cells, pads):
             sm = np.maximum(sm, np.roll(v, k) * (1 - k / 3))
         sc = np.maximum(0.001, np.append(sm, sm[0]))
         act = new_action(f"{name}__{ob.name}", ob)
-        shared = all(np.any(assigned == index)
-                     for assigned in guide.assignments.values())
+        shared = name not in STEP_SOLID_CELLS and all(
+            np.any(assigned == index) for assigned in guide.assignments.values())
         # Solo las casillas compartidas dividen sus colores; las otras se
         # iluminan completas. Se reinicia también la posición al cambiar de clip.
-        half = (guide.cell_size / 2 - guide.cell_size * 0.04) / 2
+        half = (local_cell / 2 - local_cell * 0.04) / 2
         dx = half * (1 if foot == "L" else -1) if shared else 0.0
         vals = {("scale", 0): (sc * (0.48 if shared else 1.0)).tolist(),
                 ("scale", 1): sc.tolist(), ("scale", 2): sc.tolist(),
@@ -904,7 +921,10 @@ FOOT_VERTS = foot_vertices()
 steps = {}
 for name, data in clean.items():
     J_all, P, ctx = bake_step(name, data)
-    guide = plan_guide(J_all, P, ctx.contact, scale=SCALE)
+    guide = plan_guide(J_all, P, ctx.contact, scale=SCALE,
+                       overrides=STEP_OVERRIDES.get(name, ()),
+                       mirror=STEP_MIRRORS.get(name),
+                       **STEP_GRIDS.get(name, {}))
     steps[name] = (P, guide)
 grid, cells, pads = build_grid(max(len(guide.centers) for _, guide in steps.values()),
                               CELL * SCALE)
