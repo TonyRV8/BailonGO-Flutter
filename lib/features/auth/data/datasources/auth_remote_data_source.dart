@@ -80,6 +80,48 @@ class AuthRemoteDataSource {
     }
   }
 
+  /// Correo de Firebase con el enlace para elegir una contraseña nueva.
+  /// Si el correo no tiene cuenta termina igual que si la tuviera, para no
+  /// revelar qué correos están registrados.
+  Future<void> sendPasswordResetEmail({required String email}) async {
+    try {
+      await _auth.setLanguageCode('es');
+      await _auth.sendPasswordResetEmail(email: email);
+    } on FirebaseAuthException catch (e) {
+      if (e.code == 'user-not-found') return;
+      throw AuthException(_mapAuthError(e), code: e.code);
+    } catch (e) {
+      throw AuthException('No se pudo enviar el correo: $e');
+    }
+  }
+
+  /// Firebase solo deja cambiar la contraseña con un inicio de sesión
+  /// reciente: se confirma la actual (reautenticación) y luego se cambia.
+  Future<void> changePassword({
+    required String currentPassword,
+    required String newPassword,
+  }) async {
+    final user = _auth.currentUser;
+    final email = user?.email;
+    if (user == null || email == null || email.isEmpty) {
+      throw AuthException('Tu sesión expiró. Inicia sesión de nuevo.');
+    }
+    try {
+      await user.reauthenticateWithCredential(
+        EmailAuthProvider.credential(email: email, password: currentPassword),
+      );
+    } on FirebaseAuthException catch (e) {
+      throw AuthException(_mapReauthError(e), code: e.code);
+    }
+    try {
+      await user.updatePassword(newPassword);
+    } on FirebaseAuthException catch (e) {
+      throw AuthException(_mapAuthError(e), code: e.code);
+    } catch (e) {
+      throw AuthException('No se pudo cambiar la contraseña: $e');
+    }
+  }
+
   Future<void> signOut() => _auth.signOut();
 
   /// Lee el perfil de Firestore; si aún no existe (p.ej. registro a medias),
@@ -115,8 +157,22 @@ class AuthRemoteDataSource {
         return 'La contraseña es demasiado débil (mín. 6 caracteres).';
       case 'network-request-failed':
         return 'Sin conexión a la red.';
+      case 'too-many-requests':
+        return 'Demasiados intentos. Espera unos minutos.';
+      case 'requires-recent-login':
+        return 'Por seguridad, inicia sesión de nuevo e inténtalo otra vez.';
       default:
         return e.message ?? 'Error de autenticación (${e.code}).';
     }
   }
+
+  /// Al confirmar la contraseña actual, "credencial inválida" significa que
+  /// la contraseña escrita no es la actual (no que el correo sea incorrecto).
+  String _mapReauthError(FirebaseAuthException e) => switch (e.code) {
+        'wrong-password' ||
+        'invalid-credential' ||
+        'invalid-login-credentials' =>
+          'La contraseña actual es incorrecta.',
+        _ => _mapAuthError(e),
+      };
 }

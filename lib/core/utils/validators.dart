@@ -18,6 +18,14 @@ class Validators {
     return null;
   }
 
+  /// Contraseña nueva: las mismas reglas y distinta de la actual.
+  static String? newPassword(String? value, {required String current}) {
+    final error = password(value);
+    if (error != null) return error;
+    if (value == current) return 'Debe ser distinta de la actual.';
+    return null;
+  }
+
   static String? notEmpty(String? value, {String field = 'Este campo'}) {
     if ((value?.trim() ?? '').isEmpty) return '$field es obligatorio.';
     return null;

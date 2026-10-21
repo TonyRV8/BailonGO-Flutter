@@ -18,19 +18,24 @@
       mientras apoya). La rodilla apunta siempre al frente de la pelvis (con
       el giro limitado de la real) y el pie va plano salvo punta/talón claros:
       el talón y la punta de MediaPipe vistos de frente no son fiables.
-- Dibuja el piso de 4 cuadros (`salsa_dance_grid`) y, encima, un relleno por
-  cuadro y pie (`pisada_*`) que se enciende en cada pisada hacia donde se dio
-  el paso (ver bake_pads). Las animaciones de los rellenos van en la misma
+- Dibuja por paso una grilla simétrica (`salsa_dance_grid`): una cruz de 5
+  cuadros que crece (con sus espejos) solo donde un apoyo no cae en ningún
+  cuadro, centrada donde los pies pasan más tiempo dentro de los cuadros (ver
+  dance_grid.py). Cada apoyo enciende su cuadro con el color del pie. Las animaciones van en la misma
   animación glTF que el maniquí (pistas NLA con el mismo nombre).
 """
 
 import json
 import math
 import sys
+from pathlib import Path
 
 import bpy
 import numpy as np
 from mathutils import Matrix, Quaternion, Vector
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from dance_grid import CELL, plan_guide
 
 argv = sys.argv[sys.argv.index("--") + 1:]
 BASE, CLEAN, OUT = argv[0], argv[1], argv[2]
@@ -42,45 +47,8 @@ PK_L, PK_R, IX_L, IX_R = 17, 18, 19, 20
 HIP_L, HIP_R, KN_L, KN_R, AN_L, AN_R = 23, 24, 25, 26, 27, 28
 HE_L, HE_R, TO_L, TO_R = 29, 30, 31, 32
 
-# Piso de 4 cuadros (2x2) centrado en el origen, que es la posición base de
-# los pies. CELL = lado del cuadro, GAP = separación entre cuadros.
-CELL = 0.40
-GAP = 0.04
-SQUARES = {  # nombre → centro (x, y); el maniquí mira hacia -Y
-    "frente_izq": (+(CELL + GAP) / 2, -(CELL + GAP) / 2),
-    "frente_der": (-(CELL + GAP) / 2, -(CELL + GAP) / 2),
-    "atras_izq": (+(CELL + GAP) / 2, +(CELL + GAP) / 2),
-    "atras_der": (-(CELL + GAP) / 2, +(CELL + GAP) / 2),
-}
+# Las casillas se ajustan a los apoyos de cada paso, en la escala del personaje.
 GRID_Z = 0.006
-# Cuadros (ver step_events). DEBUG_PADS=1 en el entorno lista los candidatos.
-DEBUG_PADS = bool(__import__("os").environ.get("DEBUG_PADS"))
-LOW_MAX = 0.07       # m sobre su altura de apoyo para contar como "en el piso"
-PLANT_SPEED = 0.8    # m/s: un pie que frena por debajo de esto "planta"
-MOVE_MIN = 0.12      # m que debe trasladarse desde su planta anterior
-FB_MIN = 0.10        # de ellos, al menos esto adelante/atrás
-FB_FRAC = 0.6        # y adelante/atrás debe ser la mayor parte del movimiento
-TOGETHER = 0.22      # caer a menos de esto del otro pie = volver a la base
-AWAY_MIN = 0.03      # y debe alejarse del otro pie al menos esto
-HOLD_DIST = 0.08
-SIDE_POS = 0.12
-HOLD_MAX = 30
-MIN_LIT = 6
-# Coreografía conocida por paso (lo que dijo quien revisó las animaciones):
-# filas o pies permitidos para los cuadros.
-PAD_RULES = {
-    # Cumbia: solo pasos hacia atrás (izquierdo → atrás izq, derecho → atrás
-    # der). El cuerpo gira mucho: atrás se mide respecto al cuerpo, y los
-    # pasos son abiertos y diagonales.
-    "cumbia_3d": {"rows": {"atras"}, "row_frame": "body", "fb_frac": 0.3,
-                  "together": 0.15},
-    # Giro punta-talón: solo marca el pie derecho, con toques junto al otro
-    # pie (adelante; tras la vuelta, atrás en la pista).
-    "toeheel_3d": {"feet": {"R"}, "together": 0.08, "taps": True},
-    # Suzy Q: viaja de un lado a otro; cada apoyo enciende los dos cuadros
-    # del lado de la pista donde cae el pie (si está a más de SIDE_POS).
-    "suzyq_3d": {"lateral": True},
-}
 # Emisión de los rellenos (magenta = pie izquierdo, amarillo = derecho). Por
 # debajo de 1: el tone mapping de <model-viewer> desatura (lava a blanco) los
 # emisivos cercanos a 1.
@@ -658,7 +626,7 @@ def to_basis(rot, hips_loc):
 
 
 # ------------------------------------------------------------------ claves
-def set_keys(action, path_values, group_of):
+def set_keys(action, path_values):
     """Escribe fcurves directamente (rápido). path_values:
     {(data_path, index): [valores por fotograma]}; fotogramas desde 0."""
     slot = action.slots[0]
@@ -667,7 +635,8 @@ def set_keys(action, path_values, group_of):
         type="KEYFRAME")
     bag = strip.channelbag(slot, ensure=True)
     for (path, idx), vals in path_values.items():
-        fc = bag.fcurves.new(path, index=idx, group_name=group_of(path))
+        # Sin group_name: es opcional en Blender 5 y no existe en Blender 4.5.
+        fc = bag.fcurves.new(path, index=idx)
         n = len(vals)
         fc.keyframe_points.add(n)
         co = np.empty(2 * n)
@@ -806,12 +775,12 @@ def bake_step(name, data):
         vals[(f'pose.bones["{hips}"].location', i)] = \
             [float(basis[t][hips][0][i]) for t in range(P + 1)]
     act = new_action(name, arm)
-    set_keys(act, vals, lambda p: p.split('"')[1])
+    set_keys(act, vals)
     push_nla(arm, act, name)
     print(f"  {name}: sesgo cadera/hombros {ctx.hip_bias:.1f}°")
-    # Los cuadros se calculan en la escala de los datos (umbrales en metros
-    # del maniquí), sea cual sea el personaje.
-    return J_all / SCALE, P, ctx
+    # La casilla se decide en las mismas coordenadas del piso y del personaje,
+    # no en la escala original de los datos (Claire tiene un rig más pequeño).
+    return J_all, P, ctx
 
 
 # --------------------------------------------------------------- dance grid
@@ -831,9 +800,9 @@ def make_material(name, rgb, strength, alpha, base=None):
     return m
 
 
-def build_grid():
-    """Cuatro cuadros: borde luminoso + relleno tenue (un solo mesh)."""
-    border = 0.022
+def build_grid(count, cell_size):
+    """Casillas reutilizables: cada clip coloca y muestra solo las que necesita."""
+    border = cell_size * 0.04
     verts, faces, mats = [], [], []
 
     def quad(x0, y0, x1, y1, z, mat):
@@ -842,22 +811,21 @@ def build_grid():
         faces.append((i, i + 1, i + 2, i + 3))
         mats.append(mat)
 
-    h = CELL / 2
-    for cx, cy in SQUARES.values():
-        x0, x1, y0, y1 = cx - h, cx + h, cy - h, cy + h
-        quad(x0 + border, y0 + border, x1 - border, y1 - border, GRID_Z, 1)
-        quad(x0, y0, x1, y0 + border, GRID_Z + 0.001, 0)
-        quad(x0, y1 - border, x1, y1, GRID_Z + 0.001, 0)
-        quad(x0, y0 + border, x0 + border, y1 - border, GRID_Z + 0.001, 0)
-        quad(x1 - border, y0 + border, x1, y1 - border, GRID_Z + 0.001, 0)
+    h = cell_size / 2
+    x0, x1, y0, y1 = -h, h, -h, h
+    quad(x0 + border, y0 + border, x1 - border, y1 - border, GRID_Z, 1)
+    quad(x0, y0, x1, y0 + border, GRID_Z + 0.001, 0)
+    quad(x0, y1 - border, x1, y1, GRID_Z + 0.001, 0)
+    quad(x0, y0 + border, x0 + border, y1 - border, GRID_Z + 0.001, 0)
+    quad(x1 - border, y0 + border, x1, y1 - border, GRID_Z + 0.001, 0)
     me = bpy.data.meshes.new("mesh_salsa_grid")
     me.from_pydata(verts, [], faces)
     me.polygons.foreach_set("material_index", mats)
-    me.materials.append(make_material("mat_salsa_grid", (0.0, 0.85, 0.9),
-                                      1.0, 1.0, base=(0.0, 0.1, 0.1)))
+    me.materials.append(make_material("mat_salsa_grid", (0.0, 0.65, 0.7),
+                                      0.4, 1.0, base=(0.0, 0.04, 0.04)))
     me.materials.append(make_material("mat_salsa_grid_relleno",
-                                      (0.02, 0.10, 0.12), 0.3, 1.0))
-    grid = bpy.data.objects.new("salsa_dance_grid", me)
+                                      (0.01, 0.04, 0.05), 0.15, 1.0))
+    grid = bpy.data.objects.new("salsa_dance_grid", None)
     scene.collection.objects.link(grid)
 
     # Rellenos que se encienden al pisar, uno por pie y cuadro (magenta = pie
@@ -867,176 +835,82 @@ def build_grid():
                                 base=(0.02, 0.02, 0.02)),
            "R": make_material("mat_pisada_der", FOOT_RGB["R"], 1.0, 1.0,
                                 base=(0.02, 0.02, 0.02))}
-    pads = {}
-    for name, (cx, cy) in SQUARES.items():
+    cells, pads = {}, {}
+    for index in range(count):
+        cell = bpy.data.objects.new(f"casilla_{index}", me)
+        cell.parent = grid
+        cell.scale = (0.001, 0.001, 0.001)
+        scene.collection.objects.link(cell)
+        cells[index] = cell
         for k, (foot, tag) in enumerate((("L", "izq"), ("R", "der"))):
-            s = CELL / 2 - border
-            pme = bpy.data.meshes.new(f"mesh_pisada_{name}_{tag}")
+            s = h - border
+            pme = bpy.data.meshes.new(f"mesh_pisada_{index}_{tag}")
             pme.from_pydata([(-s, -s, 0), (s, -s, 0), (s, s, 0), (-s, s, 0)],
                             [], [(0, 1, 2, 3)])
             pme.materials.append(lit[foot])
-            ob = bpy.data.objects.new(f"pisada_{name}_pie_{tag}", pme)
-            ob.location = (cx, cy, GRID_Z + 0.002 + 0.001 * k)
+            ob = bpy.data.objects.new(f"pisada_{index}_pie_{tag}", pme)
+            ob.location = (0, 0, GRID_Z + 0.002 + 0.001 * k)
             ob.scale = (0.001, 0.001, 0.001)
-            ob.parent = grid
+            ob.parent = cell
             scene.collection.objects.link(ob)
-            pads[(name, foot)] = ob
-    return grid, pads
+            pads[(index, foot)] = ob
+    return grid, cells, pads
 
 
-def circ_window(x, t, k):
-    n = len(x)
-    return x[np.arange(t - k, t + k + 1) % n]
-
-
-def circ_runs(mask):
-    """Tramos True de una máscara circular: listas de índices (el que cruza
-    el final y el inicio es uno solo)."""
-    P = len(mask)
-    if mask.all():
-        return [list(range(P))]
-    start = int(np.flatnonzero(~mask)[0])
-    runs, cur = [], []
-    for k in range(1, P + 1):
-        t = (start + k) % P
-        if mask[t]:
-            cur.append(t)
-        elif cur:
-            runs.append(cur)
-            cur = []
-    if cur:
-        runs.append(cur)
-    return runs
-
-
-def step_events(J_all, P, ctx, name):
-    """Pisadas del bucle: [(pie, cuadro, fotograma, fotogramas encendidos)].
-
-    1. Tramos "plantados": el pie cerca del piso y lento. Los toques rápidos
-       (cumbia, punta-talón) también frenan un instante y cuentan.
-    2. Cada tramo se compara con el tramo plantado anterior del mismo pie: es
-       pisada si el pie se trasladó más de MOVE_MIN, sobre todo hacia adelante
-       o atrás DEL CUERPO (la cumbia gira el cuerpo y su paso atrás queda
-       diagonal en la pista), y además
-         - se alejó del otro pie (volver a la base acerca los pies), o
-         - fue hacia atrás sin caer junto al otro pie (en salsa el pie nunca
-           "vuelve" hacia atrás a una posición abierta).
-       El pie pivote solo gira y no se traslada: no cuenta.
-    3. Cuadro: columna = la del pie (izquierdo → izq, derecho → der); fila =
-       hacia donde se movió en la pista (tras una vuelta, un toque delante del
-       cuerpo cae en la fila de atrás).
-    4. Encendido mientras siga plantado ahí, entre MIN_LIT y HOLD_MAX
-       fotogramas. PAD_RULES limita filas/pies por paso (coreografía)."""
-    rules = PAD_RULES.get(name, {})
-    mids, low, speed = {}, {}, {}
-    for s, an, he, to in (("L", AN_L, HE_L, TO_L), ("R", AN_R, HE_R, TO_R)):
-        mids[s] = (J_all[:P, he, :2] + J_all[:P, to, :2]) / 2
-        z = J_all[:P, an, 2]
-        low[s] = z - np.percentile(z, 5)
-        speed[s] = np.linalg.norm(np.roll(mids[s], -1, axis=0) -
-                                  np.roll(mids[s], 1, axis=0), axis=1) * 15
-    events = []
-    for s, o in (("L", "R"), ("R", "L")):
-        if "feet" in rules and s not in rules["feet"]:
-            continue
-        col = "izq" if s == "L" else "der"
-        runs = circ_runs((low[s] < LOW_MAX) & (speed[s] < PLANT_SPEED))
-        if len(runs) < 2:
-            continue
-        anchors = []
-        for run in runs:
-            sp = speed[s][run]
-            t = run[int(np.flatnonzero(sp <= sp.min() + 0.05)[0])]
-            anchors.append((t, np.median(mids[s][run], axis=0), run))
-        for k, (t, pos, run) in enumerate(anchors):
-            prev = anchors[k - 1][1]
-            move = pos - prev
-            dist = np.linalg.norm(move)
-            fwd = ctx.pelvis_fwd(J_all[t])[:2]
-            fb_body = float(np.dot(move, fwd))
-            fb_world = -float(move[1])                  # el frente es -Y
-            other = mids[o][t]
-            gap = np.linalg.norm(pos - other)
-            away = gap >= np.linalg.norm(prev - other) + AWAY_MIN
-            # Hacia atrás siempre cuenta (en salsa el pie no "vuelve" hacia
-            # atrás a una posición abierta); en toques (punta-talón) también
-            # hacia adelante aunque caiga cerca del otro pie.
-            tap_ok = fb_body < 0 or (rules.get("taps") and fb_body > 0)
-            ok = (dist >= MOVE_MIN and
-                  abs(fb_body) >= rules.get("fb_frac", FB_FRAC) * dist and
-                  gap >= rules.get("together", TOGETHER) and
-                  (away or tap_ok))
-            if rules.get("row_frame") == "body":
-                row = "frente" if fb_body > 0 else "atras"
-            else:
-                row = "frente" if (fb_world if abs(fb_world) > 0.05
-                                   else fb_body) > 0 else "atras"
-            if ok and "rows" in rules and row not in rules["rows"]:
-                ok = False
-            squares = [f"{row}_{col}"]
-            # Pasos de lado (suzy Q viaja de un lado a otro): encienden los
-            # dos cuadros del lado hacia donde se movió.
-            if rules.get("lateral"):
-                # La pista está centrada en la base de los pies: el lado es
-                # dónde cae el pie (izquierda de la bailarina = +X).
-                ok = abs(pos[0]) >= SIDE_POS
-                side = "izq" if pos[0] > 0 else "der"
-                squares = [f"frente_{side}", f"atras_{side}"]
-            if DEBUG_PADS:
-                print(f"      {s} t{t:>3} mov {dist:.2f} cuerpo "
-                      f"{fb_body:+.2f} pista {fb_world:+.2f} sep {gap:.2f} "
-                      f"{'aleja' if away else 'acerca'} -> "
-                      f"{'+'.join(squares) if ok else '-'}")
-            if not ok:
-                continue
-            frames = [t]
-            for d in (-1, 1):
-                for j in range(1, HOLD_MAX):
-                    uu = (t + d * j) % P
-                    if np.linalg.norm(mids[s][uu] - pos) > HOLD_DIST \
-                            or low[s][uu] > LOW_MAX:
-                        break
-                    frames.append(uu)
-            if len(frames) < MIN_LIT:
-                extra = (MIN_LIT - len(frames) + 1) // 2
-                frames += [(t + j) % P for j in range(-extra, extra + 1)]
-            for sq in squares:
-                events.append((s, sq, t, sorted(set(frames))))
-    return events
-
-
-def bake_pads(name, data, J_all, P, pads, ctx):
-    """Enciende el cuadro de cada pisada (ver step_events) con el color del
-    pie. Se enciende de golpe al pisar y se apaga en 3 fotogramas."""
-    on = {k: np.zeros(P) for k in pads}
-    for s, sq, t, frames in step_events(J_all, P, ctx, name):
-        on[(sq, s)][frames] = 1.0
-        print(f"    pisada {s} {sq:<11} en {t:>3} ({len(frames)} fotogramas)")
+def bake_guide(name, guide, P, cells, pads):
+    """El plano no se mueve dentro del clip; las luces siguen los apoyos."""
+    for index, ob in cells.items():
+        used = index < len(guide.centers)
+        xy = guide.centers[index] if used else (0, 0)
+        act = new_action(f"{name}__{ob.name}", ob)
+        vals = {("location", 0): [float(xy[0])] * (P + 1),
+                ("location", 1): [float(xy[1])] * (P + 1),
+                ("location", 2): [0.0] * (P + 1)}
+        vals.update({("scale", axis): [1.0 if used else 0.001] * (P + 1)
+                     for axis in range(3)})
+        set_keys(act, vals)
+        push_nla(ob, act, name)
     usage = {}
     for key, ob in pads.items():
-        v = on[key]
+        index, foot = key
+        v = (guide.assignments[foot] == index).astype(float)
         sm = v.copy()
         for k in (1, 2):
             sm = np.maximum(sm, np.roll(v, k) * (1 - k / 3))
         sc = np.maximum(0.001, np.append(sm, sm[0]))
         act = new_action(f"{name}__{ob.name}", ob)
-        vals = {("scale", i): sc.tolist() for i in range(3)}
-        set_keys(act, vals, lambda p: "Object Transforms")
+        shared = all(np.any(assigned == index)
+                     for assigned in guide.assignments.values())
+        # Solo las casillas compartidas dividen sus colores; las otras se
+        # iluminan completas. Se reinicia también la posición al cambiar de clip.
+        half = (guide.cell_size / 2 - guide.cell_size * 0.04) / 2
+        dx = half * (1 if foot == "L" else -1) if shared else 0.0
+        vals = {("scale", 0): (sc * (0.48 if shared else 1.0)).tolist(),
+                ("scale", 1): sc.tolist(), ("scale", 2): sc.tolist(),
+                ("location", 0): [dx] * (P + 1),
+                ("location", 1): [0.0] * (P + 1),
+                ("location", 2): [GRID_Z + 0.002 + (0.001 if foot == "R" else 0)] * (P + 1)}
+        set_keys(act, vals)
         push_nla(ob, act, name)
         if v.any():
-            usage[f"{key[0]}/{key[1]}"] = float(v.mean())
+            usage[f"{index}/{foot}"] = float(v.mean())
     return usage
 
 
 # ------------------------------------------------------------------- main
 with open(CLEAN, encoding="utf-8") as f:
     clean = json.load(f)
-grid, pads = build_grid()
 FOOT_VERTS = foot_vertices()
+steps = {}
 for name, data in clean.items():
     J_all, P, ctx = bake_step(name, data)
-    usage = bake_pads(name, data, J_all, P, pads, ctx)
-    print(f"PASO {name}: {P} fotogramas ({P / 30:.2f}s) cuadros "
+    guide = plan_guide(J_all, P, ctx.contact, scale=SCALE)
+    steps[name] = (P, guide)
+grid, cells, pads = build_grid(max(len(guide.centers) for _, guide in steps.values()),
+                              CELL * SCALE)
+for name, (P, guide) in steps.items():
+    usage = bake_guide(name, guide, P, cells, pads)
+    print(f"PASO {name}: {len(guide.centers)} casillas, {P} fotogramas "
           + " ".join(f"{k}={v:.0%}" for k, v in usage.items()))
 
 scene.frame_start = 0
@@ -1050,7 +924,7 @@ for ob in scene.objects:
     if ob.animation_data:
         for tr in ob.animation_data.nla_tracks:
             tr.mute = True
-for ob in pads.values():
+for ob in list(cells.values()) + list(pads.values()):
     ob.scale = (0.001, 0.001, 0.001)
 scene.frame_set(0)
 bpy.ops.export_scene.gltf(

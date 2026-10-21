@@ -35,6 +35,10 @@ for ob in scene.objects:
             for s in tr.strips)
         if tr.name == action_name:
             tr.mute = False
+    # El importador deja activa la primera acción en todos los objetos y la
+    # acción activa tapa las pistas NLA (se veía siempre el piso del básico).
+    if ob != arm:
+        ad.action = None
     if ob == arm:
         for tr in ad.nla_tracks:
             tr.mute = True

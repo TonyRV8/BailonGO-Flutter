@@ -28,6 +28,28 @@ class RegisterWithEmail {
       );
 }
 
+class SendPasswordResetEmail {
+  const SendPasswordResetEmail(this._repo);
+  final AuthRepository _repo;
+
+  Future<void> call({required String email}) =>
+      _repo.sendPasswordResetEmail(email: email);
+}
+
+class ChangePassword {
+  const ChangePassword(this._repo);
+  final AuthRepository _repo;
+
+  Future<void> call({
+    required String currentPassword,
+    required String newPassword,
+  }) =>
+      _repo.changePassword(
+        currentPassword: currentPassword,
+        newPassword: newPassword,
+      );
+}
+
 class SignOut {
   const SignOut(this._repo);
   final AuthRepository _repo;

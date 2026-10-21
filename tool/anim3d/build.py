@@ -5,7 +5,7 @@
 1. (--extract o si falta world.json) landmarks 3D de BailonGObailes/Buenos con
    el modelo heavy → tool/anim3d/world.json
 2. limpieza, apoyos de los pies y bucle → tool/anim3d/clean.json
-3. Blender headless: retarget + piso de 4 cuadros →
+3. Blender headless: retarget + cruz de 5 cuadros en el piso →
    assets/models/DanceGrid1.glb (maniquí) y assets/models/<Nombre>.glb por
    cada personaje de Mixamo en tool/anim3d/personajes/<Nombre>.fbx
 

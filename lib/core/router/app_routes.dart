@@ -5,6 +5,10 @@ class AppRoutes {
   static const String splash = '/';
   static const String login = '/login';
   static const String register = '/register';
+  static const String forgotPassword = '/forgot-password';
+
+  /// Rutas accesibles sin sesión.
+  static const Set<String> public = {login, register, forgotPassword};
 
   // Secciones del drawer (RF-01).
   static const String catalog = '/catalog';

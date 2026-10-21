@@ -97,7 +97,17 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                       validator: Validators.password,
                       onFieldSubmitted: (_) => _submit(),
                     ),
-                    const SizedBox(height: 24),
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: TextButton(
+                        onPressed: isLoading
+                            ? null
+                            : () => context.push(AppRoutes.forgotPassword,
+                                extra: _emailCtrl.text.trim()),
+                        child: const Text('¿Olvidaste tu contraseña?'),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
                     FilledButton(
                       onPressed: isLoading ? null : _submit,
                       child: isLoading

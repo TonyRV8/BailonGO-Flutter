@@ -453,7 +453,7 @@ def process(name, video, raw):
         loop[:, :, 2] -= 0  # el cuerpo no se toca, solo el pie
         for p in pts:
             loop[:, p, 2] -= under
-    # El centro del piso de 4 cuadros es la posición "pies juntos" (de ahí
+    # El origen de la guía es la posición "pies juntos" (de ahí
     # salen y ahí vuelven los pasos). No sirve la mediana de los apoyos: en
     # pasos que pasan mucho tiempo atrás (cumbia) el centro se corría y la base
     # quedaba "adelante", encendiendo siempre un cuadro.

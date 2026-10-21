@@ -22,6 +22,16 @@ abstract interface class AuthRepository {
     String? nombre,
   });
 
+  /// Envía el correo para restablecer la contraseña olvidada. No revela si
+  /// el correo tiene cuenta: termina igual en ambos casos.
+  Future<void> sendPasswordResetEmail({required String email});
+
+  /// Cambia la contraseña del usuario con sesión, confirmando antes la actual.
+  Future<void> changePassword({
+    required String currentPassword,
+    required String newPassword,
+  });
+
   /// Cierra la sesión.
   Future<void> signOut();
 }

@@ -54,7 +54,13 @@ void main() {
           for (var i = 0; i < nodes.length; i++)
             if ((nodes[i]['name'] as String).startsWith('pisada_')) i,
         };
-        expect(pads, hasLength(8));
+        // Un relleno por pie en cada casilla (la grilla más grande de todos
+        // los pasos; mínimo la cruz de 5).
+        final cells = nodes
+            .where((n) => (n['name'] as String).startsWith('casilla_'))
+            .length;
+        expect(cells, greaterThanOrEqualTo(5));
+        expect(pads, hasLength(2 * cells));
         for (final i in pads) {
           final scale = (nodes[i]['scale'] as List?)?.cast<num>();
           expect(scale, isNotNull, reason: nodes[i]['name'] as String);

@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../features/auth/domain/entities/app_user.dart';
+import '../../features/auth/presentation/pages/forgot_password_page.dart';
 import '../../features/auth/presentation/pages/login_page.dart';
 import '../../features/auth/presentation/pages/register_page.dart';
 import '../../features/auth/presentation/providers/auth_providers.dart';
@@ -50,8 +51,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       }
 
       final loggedIn = authState.value!.isNotEmpty;
-      final onAuthPage =
-          loc == AppRoutes.login || loc == AppRoutes.register;
+      final onAuthPage = AppRoutes.public.contains(loc);
       final onSplash = loc == AppRoutes.splash;
 
       if (!loggedIn) return onAuthPage ? null : AppRoutes.login;
@@ -70,6 +70,11 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: AppRoutes.register,
         builder: (_, __) => const RegisterPage(),
+      ),
+      GoRoute(
+        path: AppRoutes.forgotPassword,
+        builder: (_, state) =>
+            ForgotPasswordPage(initialEmail: state.extra as String? ?? ''),
       ),
       // Shell con Drawer persistente (RF-01).
       ShellRoute(

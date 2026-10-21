@@ -8,6 +8,7 @@ import 'package:image_picker/image_picker.dart';
 import '../../../../core/router/app_routes.dart';
 import '../../../auth/domain/entities/app_user.dart';
 import '../../../auth/presentation/providers/auth_providers.dart';
+import '../../../auth/presentation/widgets/change_password_dialog.dart';
 import '../../../catalog/domain/entities/dance_step.dart';
 import '../../../catalog/domain/entities/step_stats.dart';
 import '../../../catalog/presentation/providers/catalog_providers.dart';
@@ -64,6 +65,15 @@ class _Header extends ConsumerWidget {
       messenger.showSnackBar(const SnackBar(content: Text('Nombre actualizado.')));
     } catch (e) {
       messenger.showSnackBar(SnackBar(content: Text('Error: $e')));
+    }
+  }
+
+  Future<void> _changePassword(BuildContext context) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final changed = await ChangePasswordDialog.show(context);
+    if (changed == true) {
+      messenger.showSnackBar(
+          const SnackBar(content: Text('Contraseña actualizada.')));
     }
   }
 
@@ -143,6 +153,11 @@ class _Header extends ConsumerWidget {
               label: const Text('Salir'),
             ),
           ],
+        ),
+        TextButton.icon(
+          onPressed: () => _changePassword(context),
+          icon: const Icon(Icons.lock_reset),
+          label: const Text('Cambiar contraseña'),
         ),
       ],
     );
