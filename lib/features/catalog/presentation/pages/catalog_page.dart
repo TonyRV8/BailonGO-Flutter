@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../core/router/app_routes.dart';
+import '../../../pose/presentation/pages/laterality_check_page.dart';
 import '../../domain/entities/dance_step.dart';
 import '../providers/catalog_providers.dart';
 
@@ -27,10 +28,50 @@ class CatalogPage extends ConsumerWidget {
         },
         child: ListView.separated(
           padding: const EdgeInsets.all(12),
-          itemCount: steps.length,
+          // La primera ficha es la prueba de lateralidad, no un paso.
+          itemCount: steps.length + 1,
           separatorBuilder: (_, __) => const SizedBox(height: 12),
-          itemBuilder: (context, i) => _StepCard(step: steps[i]),
+          itemBuilder: (context, i) =>
+              i == 0 ? const _LateralityCard() : _StepCard(step: steps[i - 1]),
         ),
+      ),
+    );
+  }
+}
+
+/// Acceso a la comprobación de izquierda/derecha. Va arriba del catálogo
+/// porque conviene pasarla una vez por teléfono, antes de evaluar: si los
+/// lados salen cambiados, los consejos de la evaluación hablan del lado
+/// equivocado.
+class _LateralityCard extends StatelessWidget {
+  const _LateralityCard();
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Card(
+      clipBehavior: Clip.antiAlias,
+      color: theme.colorScheme.secondaryContainer,
+      child: ListTile(
+        leading: Icon(Icons.swap_horiz,
+            color: theme.colorScheme.onSecondaryContainer),
+        title: Text(
+          'Comprobar izquierda y derecha',
+          style: theme.textTheme.titleMedium?.copyWith(
+            fontWeight: FontWeight.w600,
+            color: theme.colorScheme.onSecondaryContainer,
+          ),
+        ),
+        subtitle: Text(
+          'Levanta el brazo derecho y confirma que la app lo reconoce.',
+          style: theme.textTheme.bodySmall?.copyWith(
+            color: theme.colorScheme.onSecondaryContainer,
+          ),
+        ),
+        trailing: Icon(Icons.chevron_right,
+            color: theme.colorScheme.onSecondaryContainer),
+        onTap: () =>
+            Navigator.of(context).push(LateralityCheckPage.route()),
       ),
     );
   }
