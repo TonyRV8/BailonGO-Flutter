@@ -94,7 +94,8 @@ class _ChangePasswordDialogState extends ConsumerState<ChangePasswordDialog> {
                       Validators.newPassword(v, current: _currentCtrl.text)),
               const SizedBox(height: 8),
               _field(_confirmCtrl, 'Confirmar nueva contraseña',
-                  validator: (v) => Validators.confirmPassword(v, _newCtrl.text),
+                  validator: (v) =>
+                      Validators.confirmPassword(v, _newCtrl.text),
                   last: true),
               CheckboxListTile(
                 value: _visible,

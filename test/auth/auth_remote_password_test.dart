@@ -86,8 +86,7 @@ void main() {
         ('network-request-failed', 'Sin conexión a la red.'),
       ]) {
         auth.resetError = FirebaseAuthException(code: code);
-        await expectLater(
-            source.sendPasswordResetEmail(email: 'ana@mail.com'),
+        await expectLater(source.sendPasswordResetEmail(email: 'ana@mail.com'),
             throwsA(authError(message)));
       }
     });

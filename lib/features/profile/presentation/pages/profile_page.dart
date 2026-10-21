@@ -8,7 +8,7 @@ import 'package:image_picker/image_picker.dart';
 import '../../../../core/router/app_routes.dart';
 import '../../../auth/domain/entities/app_user.dart';
 import '../../../auth/presentation/providers/auth_providers.dart';
-import '../../../auth/presentation/widgets/change_password_dialog.dart';
+import '../../../auth/presentation/widgets/password_security_button.dart';
 import '../../../catalog/domain/entities/dance_step.dart';
 import '../../../catalog/domain/entities/step_stats.dart';
 import '../../../catalog/presentation/providers/catalog_providers.dart';
@@ -62,18 +62,10 @@ class _Header extends ConsumerWidget {
     if (nombre == null || nombre.isEmpty || nombre == user.nombre) return;
     try {
       await ref.read(profileControllerProvider.notifier).updateName(nombre);
-      messenger.showSnackBar(const SnackBar(content: Text('Nombre actualizado.')));
+      messenger
+          .showSnackBar(const SnackBar(content: Text('Nombre actualizado.')));
     } catch (e) {
       messenger.showSnackBar(SnackBar(content: Text('Error: $e')));
-    }
-  }
-
-  Future<void> _changePassword(BuildContext context) async {
-    final messenger = ScaffoldMessenger.of(context);
-    final changed = await ChangePasswordDialog.show(context);
-    if (changed == true) {
-      messenger.showSnackBar(
-          const SnackBar(content: Text('Contraseña actualizada.')));
     }
   }
 
@@ -101,8 +93,9 @@ class _Header extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
-    final initial =
-        (user.nombre?.isNotEmpty ?? false) ? user.nombre![0].toUpperCase() : '?';
+    final initial = (user.nombre?.isNotEmpty ?? false)
+        ? user.nombre![0].toUpperCase()
+        : '?';
     final hasPhoto = user.fotoUrl != null && user.fotoUrl!.isNotEmpty;
     return Column(
       children: [
@@ -154,11 +147,7 @@ class _Header extends ConsumerWidget {
             ),
           ],
         ),
-        TextButton.icon(
-          onPressed: () => _changePassword(context),
-          icon: const Icon(Icons.lock_reset),
-          label: const Text('Cambiar contraseña'),
-        ),
+        PasswordSecurityButton(email: user.email),
       ],
     );
   }
@@ -189,9 +178,7 @@ class _Progress extends ConsumerWidget {
         _StepStatus statusOf(DanceStep s) {
           final b = best[s.id];
           if (b == null) return _StepStatus.notStarted;
-          return b >= threshold
-              ? _StepStatus.learned
-              : _StepStatus.practicing;
+          return b >= threshold ? _StepStatus.learned : _StepStatus.practicing;
         }
 
         final learned =
@@ -214,11 +201,13 @@ class _Progress extends ConsumerWidget {
                         label: 'En práctica',
                         value: '$practicing',
                         color: Colors.orange)),
-                Expanded(child: _Stat(label: 'Pasos', value: '${steps.length}')),
+                Expanded(
+                    child: _Stat(label: 'Pasos', value: '${steps.length}')),
                 Expanded(
                     child: _Stat(
                         label: 'Intentos',
-                        value: '${data.values.fold<int>(0, (a, s) => a + s.attempts)}')),
+                        value:
+                            '${data.values.fold<int>(0, (a, s) => a + s.attempts)}')),
               ],
             ),
             const SizedBox(height: 12),
@@ -231,8 +220,7 @@ class _Progress extends ConsumerWidget {
                   title: Text(s.nombre),
                   subtitle: Text(() {
                     final n = data[s.id]?.attempts ?? 0;
-                    final intentos =
-                        '$n ${n == 1 ? 'intento' : 'intentos'}';
+                    final intentos = '$n ${n == 1 ? 'intento' : 'intentos'}';
                     return '${_label(status)} · $intentos';
                   }()),
                   trailing: Text(

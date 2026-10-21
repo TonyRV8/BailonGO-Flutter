@@ -41,6 +41,7 @@ dependencies:
   # Visor 3D del paso (.glb con animaciones) sobre <model-viewer> en WebView.
   model_viewer_plus: ^1.10.0
   webview_flutter: ^4.14.1
+  google_sign_in: ^7.2.0
 
   # Fases posteriores (se activan al llegar a su fase):
   # hive: ^2.2.3

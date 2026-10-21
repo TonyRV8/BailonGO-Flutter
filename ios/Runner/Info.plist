@@ -76,5 +76,20 @@
 		<key>NSAllowsLocalNetworking</key>
 		<true/>
 	</dict>
+	<!-- Inicio de sesión con Google: client ID iOS y esquema de regreso
+	     (CLIENT_ID / REVERSED_CLIENT_ID de GoogleService-Info.plist). -->
+	<key>GIDClientID</key>
+	<string>4208989468-jgj6s4pm8pfo7aefetj8e8om3mj83jnc.apps.googleusercontent.com</string>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>com.googleusercontent.apps.4208989468-jgj6s4pm8pfo7aefetj8e8om3mj83jnc</string>
+			</array>
+		</dict>
+	</array>
 </dict>
 </plist>

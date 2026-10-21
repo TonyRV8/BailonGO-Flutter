@@ -12,6 +12,13 @@ class SignInWithEmail {
       _repo.signInWithEmail(email: email, password: password);
 }
 
+class SignInWithGoogle {
+  const SignInWithGoogle(this._repo);
+  final AuthRepository _repo;
+
+  Future<AppUser> call() => _repo.signInWithGoogle();
+}
+
 class RegisterWithEmail {
   const RegisterWithEmail(this._repo);
   final AuthRepository _repo;
