@@ -4,25 +4,17 @@ import 'package:firebase_auth/firebase_auth.dart';
 import '../../../../core/config/app_constants.dart';
 import '../../../../core/error/exceptions.dart';
 import '../models/app_user_model.dart';
-import 'google_id_token_source.dart';
 
 /// Fuente de datos remota: Firebase Auth (credenciales) + Firestore (perfil).
 class AuthRemoteDataSource {
   AuthRemoteDataSource({
     required FirebaseAuth auth,
     required FirebaseFirestore firestore,
-    GoogleIdTokenSource? google,
   })  : _auth = auth,
-        _firestore = firestore,
-        _google = google ?? GoogleSignInIdTokenSource();
+        _firestore = firestore;
 
   final FirebaseAuth _auth;
   final FirebaseFirestore _firestore;
-  final GoogleIdTokenSource _google;
-
-  /// Código de [AuthException] cuando el usuario cierra el selector de
-  /// Google sin elegir cuenta: no es un error que haya que mostrar.
-  static const googleCanceled = 'google-canceled';
 
   CollectionReference<Map<String, dynamic>> get _users =>
       _firestore.collection(AppConstants.usersCollection);
@@ -34,12 +26,6 @@ class AuthRemoteDataSource {
       return _profileFor(user);
     });
   }
-
-  /// La cuenta con sesión puede entrar con contraseña (no solo con Google).
-  bool get currentUserHasPassword =>
-      _auth.currentUser?.providerData
-          .any((p) => p.providerId == EmailAuthProvider.PROVIDER_ID) ??
-      false;
 
   AppUserModel? get currentUserOrNull {
     final user = _auth.currentUser;
@@ -136,47 +122,7 @@ class AuthRemoteDataSource {
     }
   }
 
-  /// Selector de cuentas de Google y luego Firebase con su ID token. El
-  /// primer ingreso crea el perfil en USERS como el registro; si ya existe
-  /// (p. ej. una cuenta de correo con el mismo email) no se toca.
-  Future<AppUserModel> signInWithGoogle() async {
-    final idToken = await _google.pickIdToken();
-    if (idToken == null) {
-      throw AuthException('Inicio de sesión cancelado.', code: googleCanceled);
-    }
-    try {
-      final cred = await _auth.signInWithCredential(
-        GoogleAuthProvider.credential(idToken: idToken),
-      );
-      final user = cred.user!;
-      await _ensureProfile(user);
-      return _profileFor(user);
-    } on FirebaseAuthException catch (e) {
-      throw AuthException(_mapAuthError(e), code: e.code);
-    } catch (e) {
-      throw AuthException('No se pudo iniciar sesión con Google: $e');
-    }
-  }
-
-  Future<void> _ensureProfile(User user) async {
-    final doc = _users.doc(user.uid);
-    if ((await doc.get()).exists) return;
-    await doc.set(AppUserModel(
-      uid: user.uid,
-      email: user.email ?? '',
-      nombre: user.displayName,
-      fotoUrl: user.photoURL,
-    ).toFirestoreCreate());
-  }
-
-  /// Cierra también la sesión de Google, para que el próximo ingreso deje
-  /// elegir cuenta. Si Google falla (sin Play Services) igual se sale.
-  Future<void> signOut() async {
-    try {
-      await _google.signOut();
-    } catch (_) {}
-    await _auth.signOut();
-  }
+  Future<void> signOut() => _auth.signOut();
 
   /// Lee el perfil de Firestore; si aún no existe (p.ej. registro a medias),
   /// regresa un modelo básico con los datos de Auth.
@@ -213,9 +159,6 @@ class AuthRemoteDataSource {
         return 'Sin conexión a la red.';
       case 'too-many-requests':
         return 'Demasiados intentos. Espera unos minutos.';
-      case 'account-exists-with-different-credential':
-        return 'Ese correo ya está registrado con contraseña. Inicia sesión '
-            'con tu correo y contraseña.';
       case 'requires-recent-login':
         return 'Por seguridad, inicia sesión de nuevo e inténtalo otra vez.';
       default:

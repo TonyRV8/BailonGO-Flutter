@@ -4,10 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../../core/router/app_routes.dart';
 import '../../../../core/utils/validators.dart';
-import '../../../../core/error/exceptions.dart';
-import '../../data/datasources/auth_remote_data_source.dart';
 import '../providers/auth_providers.dart';
-import '../widgets/google_sign_in_button.dart';
 
 class RegisterPage extends ConsumerStatefulWidget {
   const RegisterPage({super.key});
@@ -47,7 +44,7 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
     final isLoading = state.isLoading;
 
     ref.listen(authControllerProvider, (prev, next) {
-      if (next.hasError && !next.isLoading && !_isCanceled(next.error!)) {
+      if (next.hasError && !next.isLoading) {
         ScaffoldMessenger.of(context)
           ..hideCurrentSnackBar()
           ..showSnackBar(
@@ -124,14 +121,6 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
                           : const Text('Registrarme'),
                     ),
                     const SizedBox(height: 12),
-                    GoogleSignInButton(
-                      onPressed: isLoading
-                          ? null
-                          : () => ref
-                              .read(authControllerProvider.notifier)
-                              .signInWithGoogle(),
-                    ),
-                    const SizedBox(height: 12),
                     TextButton(
                       onPressed:
                           isLoading ? null : () => context.go(AppRoutes.login),
@@ -146,11 +135,6 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
       ),
     );
   }
-
-  /// Cerrar el selector de Google sin elegir cuenta no es un error.
-  bool _isCanceled(Object error) =>
-      error is AuthException &&
-      error.code == AuthRemoteDataSource.googleCanceled;
 
   String _errorText(Object error) =>
       error.toString().replaceFirst(RegExp(r'^.*Exception[^:]*:\s*'), '');

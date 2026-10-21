@@ -22,12 +22,6 @@ class AuthRepositoryImpl implements AuthRepository {
       _remote.signInWithEmail(email: email, password: password);
 
   @override
-  Future<AppUser> signInWithGoogle() => _remote.signInWithGoogle();
-
-  @override
-  bool get hasPasswordSignIn => _remote.currentUserHasPassword;
-
-  @override
   Future<AppUser> registerWithEmail({
     required String email,
     required String password,

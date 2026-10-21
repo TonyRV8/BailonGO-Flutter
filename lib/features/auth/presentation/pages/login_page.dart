@@ -4,10 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../../core/router/app_routes.dart';
 import '../../../../core/utils/validators.dart';
-import '../../../../core/error/exceptions.dart';
-import '../../data/datasources/auth_remote_data_source.dart';
 import '../providers/auth_providers.dart';
-import '../widgets/google_sign_in_button.dart';
 
 class LoginPage extends ConsumerStatefulWidget {
   const LoginPage({super.key});
@@ -44,7 +41,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
 
     // Muestra errores de la acción en un snackbar.
     ref.listen(authControllerProvider, (prev, next) {
-      if (next.hasError && !next.isLoading && !_isCanceled(next.error!)) {
+      if (next.hasError && !next.isLoading) {
         ScaffoldMessenger.of(context)
           ..hideCurrentSnackBar()
           ..showSnackBar(
@@ -122,18 +119,9 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                           : const Text('Iniciar sesión'),
                     ),
                     const SizedBox(height: 12),
-                    GoogleSignInButton(
-                      onPressed: isLoading
-                          ? null
-                          : () => ref
-                              .read(authControllerProvider.notifier)
-                              .signInWithGoogle(),
-                    ),
-                    const SizedBox(height: 12),
                     TextButton(
-                      onPressed: isLoading
-                          ? null
-                          : () => context.go(AppRoutes.register),
+                      onPressed:
+                          isLoading ? null : () => context.go(AppRoutes.register),
                       child: const Text('¿No tienes cuenta? Regístrate'),
                     ),
                   ],
@@ -145,11 +133,6 @@ class _LoginPageState extends ConsumerState<LoginPage> {
       ),
     );
   }
-
-  /// Cerrar el selector de Google sin elegir cuenta no es un error.
-  bool _isCanceled(Object error) =>
-      error is AuthException &&
-      error.code == AuthRemoteDataSource.googleCanceled;
 
   String _errorText(Object error) =>
       error.toString().replaceFirst(RegExp(r'^.*Exception[^:]*:\s*'), '');

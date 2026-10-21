@@ -64,7 +64,6 @@ class DefaultFirebaseOptions {
     messagingSenderId: '4208989468',
     projectId: 'bailongo-f3384',
     storageBucket: 'bailongo-f3384.firebasestorage.app',
-    iosClientId: '4208989468-jgj6s4pm8pfo7aefetj8e8om3mj83jnc.apps.googleusercontent.com',
     iosBundleId: 'com.bailongo.bailongo',
   );
 

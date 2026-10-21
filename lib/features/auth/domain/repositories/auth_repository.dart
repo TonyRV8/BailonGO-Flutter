@@ -15,14 +15,6 @@ abstract interface class AuthRepository {
     required String password,
   });
 
-  /// Inicia sesión con una cuenta de Google (crea el perfil la primera vez).
-  /// Si el usuario cierra el selector lanza una AuthException con código
-  /// `google-canceled`.
-  Future<AppUser> signInWithGoogle();
-
-  /// La cuenta con sesión tiene contraseña (las de solo Google no).
-  bool get hasPasswordSignIn;
-
   /// Registra un usuario nuevo y crea su documento en USERS.
   Future<AppUser> registerWithEmail({
     required String email,

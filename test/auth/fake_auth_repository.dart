@@ -8,19 +8,6 @@ class FakeAuthRepository implements AuthRepository {
   final resetEmails = <String>[];
   final passwordChanges = <(String, String)>[];
   String? failWith;
-  String? failCode;
-  int googleSignIns = 0;
-  bool hasPassword = true;
-
-  @override
-  bool get hasPasswordSignIn => hasPassword;
-
-  @override
-  Future<AppUser> signInWithGoogle() async {
-    if (failWith != null) throw AuthException(failWith!, code: failCode);
-    googleSignIns++;
-    return const AppUser(uid: 'u1', email: 'ana@gmail.com');
-  }
 
   @override
   Future<void> sendPasswordResetEmail({required String email}) async {

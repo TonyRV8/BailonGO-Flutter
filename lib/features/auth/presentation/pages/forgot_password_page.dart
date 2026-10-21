@@ -40,9 +40,7 @@ class _ForgotPasswordPageState extends ConsumerState<ForgotPasswordPage> {
       _error = null;
     });
     try {
-      await ref
-          .read(authRepositoryProvider)
-          .sendPasswordResetEmail(email: email);
+      await ref.read(authRepositoryProvider).sendPasswordResetEmail(email: email);
       if (mounted) setState(() => _sentTo = email);
     } on AuthException catch (e) {
       if (mounted) setState(() => _error = e.message);
@@ -132,9 +130,7 @@ class _ForgotPasswordPageState extends ConsumerState<ForgotPasswordPage> {
                               width: 22,
                               child: CircularProgressIndicator(strokeWidth: 2),
                             )
-                          : Text(_sentTo == null
-                              ? 'Enviar enlace'
-                              : 'Reenviar enlace'),
+                          : Text(_sentTo == null ? 'Enviar enlace' : 'Reenviar enlace'),
                     ),
                     const SizedBox(height: 12),
                     TextButton(
