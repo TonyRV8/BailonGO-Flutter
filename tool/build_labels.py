@@ -93,8 +93,24 @@ TOL_NOTA = 7      # nota explícita del revisor: media nota arriba y abajo
 # sobresaliente. Es un ajuste DECLARADO de la escala, no una nota del revisor,
 # y por eso queda escrito en el campo `src` de cada entrada.
 AVRIL_BONO = 5
+
+# Diez puntos de cortesía a TODAS las tomas de alumno (2026-10-21, decisión
+# del usuario tras probar la app). Probando los pasos en el teléfono, las
+# notas salían más duras que el juicio de quien baila: una ejecución decente
+# se sentía 15 puntos por debajo de lo que merecía. Como el ajuste solo sabe
+# de las etiquetas, subirlas es la forma declarada de mover la escala entera
+# sin tocar el algoritmo. Se suma DESPUÉS del bono de Avril y queda escrito en
+# el campo `src`. No aplica a los bailes ajenos ni a la tanda de 10 de la
+# profesora, que son los dos extremos que sostienen la escala.
+ALUMNO_BONO = 10
+
 TOL_BANDA = 10    # "3-5" -> 40 +- 10
 BANDA = 40
+
+# La tanda de 10 de la profesora: `Profa_<Paso>_calif10.mp4`, movida a las
+# carpetas de cada paso el 2026-10-21. Tolerancia más estrecha porque es el
+# ancla del extremo alto.
+TOL_PROFA = 5
 
 
 def name_score(fname):
@@ -162,37 +178,52 @@ def main():
             if found:
                 if n is None:
                     labels[key] = {"score": 10, "tol": 10,
-                                   "src": "SUPUESTO: 'NADA' = no ejecutó el paso"}
+                                   "src": "SUPUESTO: 'NADA' = no ejecutó el "
+                                          "paso (sin bono de escala)"}
                 else:
                     src = f"revisor {n}/10 (nombre del archivo)"
                     reason = name_reason(f)
                     if reason:
                         src += f" — {reason}"
                     score = n * 10
+                    if low.startswith("profa"):
+                        labels[key] = {
+                            "score": score, "tol": TOL_PROFA,
+                            "src": f"{src} — tanda de 10 de la profesora "
+                                   f"(ancla del extremo alto)"}
+                        continue
                     if low.startswith("avril"):
                         score += AVRIL_BONO
                         src += f" +{AVRIL_BONO} de cortesía (techo del corpus)"
-                    labels[key] = {"score": score, "tol": TOL_NOTA, "src": src}
+                    score += ALUMNO_BONO
+                    src += f" +{ALUMNO_BONO} de escala (2026-10-21)"
+                    labels[key] = {"score": min(score, 100), "tol": TOL_NOTA,
+                                   "src": src}
             elif key in AVRIL:
                 labels[key] = {
-                    "score": AVRIL[key] * 10 + AVRIL_BONO,
+                    "score": min(AVRIL[key] * 10 + AVRIL_BONO + ALUMNO_BONO, 100),
                     "tol": TOL_NOTA,
                     "src": f"revisor {AVRIL[key]}/10 "
-                           f"+{AVRIL_BONO} de cortesía (techo del corpus)",
+                           f"+{AVRIL_BONO} de cortesía (techo del corpus) "
+                           f"+{ALUMNO_BONO} de escala (2026-10-21)",
                 }
             elif low.startswith("avril"):
                 labels[key] = {"score": None, "tol": 0,
                                "src": "sin etiqueta: el revisor solo puntuó otra toma suya"}
             elif f in gabo_scored:
                 n = gabo_scored[f]
-                labels[key] = {"score": n * 10, "tol": TOL_NOTA,
-                               "src": f"revisor {n}/10 (lista por paso)"}
+                labels[key] = {
+                    "score": min(n * 10 + ALUMNO_BONO, 100), "tol": TOL_NOTA,
+                    "src": f"revisor {n}/10 (lista por paso) "
+                           f"+{ALUMNO_BONO} de escala (2026-10-21)"}
             elif low.startswith("gabo") and gabo_low:
                 labels[key] = {"score": None, "tol": 0,
                                "src": "sin etiqueta: su mejor toma del paso es < 3/10"}
             else:
-                labels[key] = {"score": BANDA, "tol": TOL_BANDA,
-                               "src": "banda 3-5/10 (Toto, Primo y sobrantes de Gabo)"}
+                labels[key] = {
+                    "score": BANDA + ALUMNO_BONO, "tol": TOL_BANDA,
+                    "src": "banda 3-5/10 (Toto, Primo y sobrantes de Gabo) "
+                           f"+{ALUMNO_BONO} de escala (2026-10-21)"}
 
     with open(OUT, "w", encoding="utf-8") as fh:
         json.dump(labels, fh, ensure_ascii=False, indent=1, sort_keys=True)

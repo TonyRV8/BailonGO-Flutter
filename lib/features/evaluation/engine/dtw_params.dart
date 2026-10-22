@@ -17,6 +17,21 @@
 ///     tanto como quedarse quietos → alineación 0 bailando bien.
 ///   * ritmo mucho más estricto (correlación 0.30 → 0, 0.70 → 100, lag ±12):
 ///     un baile que no tiene nada que ver sacaba 47-93 de ritmo.
+///
+/// Revisión 4 (2026-10-21): `rhythmMaxLag` 12 → 18 (±0.6 s en vez de ±0.4 s),
+/// medido contra la tanda de nueve tomas que la profesora calificó con 10
+/// (`bailes10profacalibracion`). Ir medio tiempo por delante o por detrás en
+/// un momento suelto no es bailar fuera de compás, y con ±0.4 s esas tomas
+/// perdían tramos enteros de ritmo. La pérdida del banco baja de 97.3 a 88.3
+/// y los bailes ajenos solo suben de 17 a 20 de media: es el único aflojado
+/// que mejora el acuerdo con el revisor en vez de empeorarlo.
+///
+/// Segunda pasada de la misma vuelta, tras probar la app en el teléfono: la
+/// correlación del ritmo pasa de 0.30/0.70 a 0.25/0.65 junto con la subida de
+/// 10 puntos de las etiquetas de alumno (`ALUMNO_BONO` en build_labels.py).
+/// Con las etiquetas nuevas esto BAJA la pérdida (99.6 → 91.5), al revés que
+/// antes. No se baja más: con 0.20/0.60 las tomas de 10 solo ganan 0.7 puntos
+/// y un baile que no corresponde al paso llega a 47.
 ///   * cobertura 0.05/0.35 sin mínimo, clip 4, postura media 0.5, curva 0.6,
 ///     banda 0.16. `snrK` 8 y amplitud mínima 3× temblor se CONSERVAN aunque
 ///     el barrido prefiriera 2 y 1×: sobre tomas reales solo cuesta +1 de
@@ -47,10 +62,10 @@ class DtwParams {
     this.coverageZeroRatio = 0.05,
     this.coverageMinFactor = 0.0,
     this.rhythmWindow = 60,
-    this.rhythmMaxLag = 12,
+    this.rhythmMaxLag = 18,
     this.rhythmSmooth = 5,
-    this.rhythmCorrZero = 0.3,
-    this.rhythmCorrFull = 0.7,
+    this.rhythmCorrZero = 0.25,
+    this.rhythmCorrFull = 0.65,
     this.globalFromSegments = true,
     this.mirrorFullSeverity = 0.35,
     this.mirrorMinFactor = 0.15,

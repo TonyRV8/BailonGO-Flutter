@@ -15,9 +15,29 @@ import 'dart:io';
 
 import 'package:bailongo/features/catalog/domain/step_weights.dart';
 import 'package:bailongo/features/evaluation/engine/dtw_comparator.dart';
+import 'package:bailongo/features/evaluation/engine/feature_extractor.dart';
+import 'package:bailongo/features/evaluation/engine/frame_resampler.dart';
 import 'package:bailongo/features/evaluation/engine/step_params.dart';
 
-import 'bench_real.dart' show Take, featuresOf, loadTakes;
+import 'bench_real.dart' show Take, featuresOf, loadTakes, toLandmarks;
+
+/// Features de [t] llevadas a la rejilla de [targetMs] estirando el tiempo:
+/// la toma completa cabe en la ventana aunque dure más o menos.
+List<List<double>> stretchedFeatures(Take t,
+    {required int targetMs, bool mirror = false}) {
+  final feats = <List<double>>[];
+  final times = <int>[];
+  final factor = targetMs / t.durationMs;
+  for (var i = 0; i < t.frames.length; i++) {
+    final v = FeatureExtractor.extractFeatures(toLandmarks(t.frames[i]),
+        aspectRatio: t.aspect, isMirrored: mirror);
+    if (v != null) {
+      feats.add(v);
+      times.add((i * 33 * factor).round());
+    }
+  }
+  return FrameResampler.toGrid(feats, times, durationMs: targetMs);
+}
 
 void main(List<String> args) {
   if (args.length < 3) {
@@ -53,8 +73,19 @@ void main(List<String> args) {
   // `espejo`: la toma viene volteada horizontalmente (p. ej. grabada con
   // la cámara frontal, que guarda el video en espejo).
   final mirror = args.contains('espejo');
-  final user =
-      featuresOf(take, durationMs: ref.length * 33, mirror: mirror);
+  // `estirar`: la toma entera se lleva a la ventana de la referencia en vez de
+  // cortarse al final. Sirve para separar la FORMA del tempo de la grabación
+  // cuando la toma no se bailó con la música del paso.
+  final stretch = args.contains('estirar');
+  // `completo`: se evalúa la toma ENTERA aunque dure más que la referencia,
+  // en vez de cortarla al cerrarse la ventana. El DTW y la correlación de
+  // ritmo ya comparan secuencias de distinta longitud.
+  final full = args.contains('completo');
+  final user = stretch
+      ? stretchedFeatures(take, targetMs: ref.length * 33, mirror: mirror)
+      : featuresOf(take,
+          durationMs: full ? take.durationMs.round() : ref.length * 33,
+          mirror: mirror);
   final r = DtwComparator.compare(user, ref,
       weights: weightsForStep(stepId), params: paramsFor(stepId));
 
@@ -64,7 +95,8 @@ void main(List<String> args) {
   stdout.writeln('paso      $stepId  '
       '(referencia ${ref.length} fotogramas, '
       '${(ref.length * 33 / 1000).toStringAsFixed(1)} s)');
-  stdout.writeln('espejo    ${mirror ? 'sí (toma volteada)' : 'no'}');
+  stdout.writeln('espejo    ${mirror ? 'sí (toma volteada)' : 'no'}'
+      '${stretch ? '   · ventana estirada (sin cortar el final)' : ''}');
   stdout.writeln('umbrales  floor ${p.alignNoiseFloor.toStringAsFixed(3)}  '
       'max ${p.alignMax.toStringAsFixed(3)}');
   stdout.writeln('');

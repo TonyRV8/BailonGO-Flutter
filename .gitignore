@@ -92,6 +92,7 @@ Thumbs.db
 # tool/extract_landmarks.py). No se versiona.
 /tool/landmarks.json
 /tool/landmarks_revisados.json
+/tool/landmarks_prof10.json
 /tool/__pycache__/
 /tool/anim3d/__pycache__/
 

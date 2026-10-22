@@ -79,6 +79,15 @@ const lblSelf = Label('ideal', 100, 3, weight: 1);
 // para perseguir notas de alumno que quedaban fuera de alcance de todos
 // modos, y acabó dándole 90 a la ejecución que la experta puntuó 7-8.
 const lblRegular = Label('regular', 75, 5, weight: 6);
+/// Las nueve tomas de `bailes10profacalibracion`. La experta las dio por
+/// perfectas, así que marcan dónde empieza el sobresaliente. Objetivo 95 y no
+/// 100 porque son una ejecución DISTINTA de la referencia: pedir el 100 sería
+/// pedirle al motor que ignore toda diferencia entre dos pasadas del mismo
+/// paso, que es justo lo que separa un 10 de un 7.
+/// Peso de las tomas de 10 en la pérdida (--peso10=N). 8 medido: con 4 el
+/// ajuste las deja en 84.7 de media y con 14 solo sube a 85.9, así que 8 es
+/// donde deja de pagar; los bailes ajenos no se mueven (17.9 de media).
+double kPeso10 = 8;
 const lblStill = Label('quieto', 0, 5, weight: 2);
 const lblShift = Label('desfase', 92, 6, weight: 1);
 const lblSlow = Label('lento10', 85, 10, weight: 1);
@@ -109,17 +118,19 @@ Map<String, Label> loadLabels(String path) {
     // El nombre del grupo solo sirve para agregar en la tabla resumen.
     final who = folder == 'randoms'
         ? 'ajeno'
-        : file.startsWith('abdiel') || file.startsWith('adbiel')
-            ? 'abdiel'
-            : file.startsWith('avril')
-                ? 'avril'
-                : file.startsWith('gabo')
-                    ? 'gabo'
-                    : file.startsWith('primo')
-                        ? 'primo'
-                        : file.startsWith('toto')
-                            ? 'toto'
-                            : 'otro';
+        : file.startsWith('profa')
+            ? 'profa10'
+            : file.startsWith('abdiel') || file.startsWith('adbiel')
+                ? 'abdiel'
+                : file.startsWith('avril')
+                    ? 'avril'
+                    : file.startsWith('gabo')
+                        ? 'gabo'
+                        : file.startsWith('primo')
+                            ? 'primo'
+                            : file.startsWith('toto')
+                                ? 'toto'
+                                : 'otro';
     out[e.key] = Label(
       who,
       score ?? 0,
@@ -130,9 +141,15 @@ Map<String, Label> loadLabels(String path) {
       // mal, porque el alumno abandona por lo primero.
       weight: score == null
           ? 0
-          : (kHighPriority && score >= 70)
-              ? 6
-              : 2,
+          // La tanda de 10 de la profesora es el ancla del extremo alto: pesa
+          // como la toma imperfecta que calificó ella misma, no como una toma
+          // de alumno. Medido: con peso 4 el ajuste las deja 1 punto por
+          // debajo y con 14 solo medio punto por encima.
+          : who == 'profa10'
+              ? kPeso10
+              : (kHighPriority && score >= 70)
+                  ? 6
+                  : 2,
       scored: score != null,
       direct: (v['src'] as String? ?? '').contains('revisor'),
     );
@@ -691,7 +708,10 @@ double _mae(List<double> a, List<double> b) {
 /// lo que cuesta quedarse quieto, así que con el tope anterior de 0.7 el
 /// sobresaliente quedaba fuera de alcance por construcción.
 const double kFloorMax = 1.0;
-const double kMinSpan = 0.4;
+// Recorrido mínimo entre el 100 y el 0 de la curva. Subido de 0.4 a 0.8 el
+// 2026-10-21: con 0.54 el Right Spot Turn se volvió un acantilado y un
+// intento decente marcaba 13 o 0 de alineación en el teléfono.
+const double kMinSpan = 0.8;
 
 /// El umbral de "ejecución perfecta" de un paso no puede superar esta
 /// fracción de lo que cuesta su toma imperfecta. Sin la restricción, el
@@ -919,6 +939,8 @@ void main(List<String> args) {
   final stepArg = args.where((a) => a.startsWith('--step=')).toList();
   final only = stepArg.isEmpty ? null : {stepArg.first.substring(7)};
   kHighPriority = args.contains('--priorizaalto');
+  final peso = args.where((a) => a.startsWith('--peso10=')).toList();
+  if (peso.isNotEmpty) kPeso10 = double.parse(peso.first.substring(9));
   final labels = loadLabels('tool/labels.json');
   final cases = buildCases(prof, real, labels,
       mirror: args.contains('--mirror'), only: only);
@@ -948,6 +970,11 @@ void main(List<String> args) {
         amplitudeNormalize: args.contains('--noamp') ? false : null,
         userAmplitudeNormalize: args.contains('--nouamp') ? false : null,
         centerFeatures: args.contains('--nocenter') ? false : null,
+        // --ritglobal: el ritmo global deja de ser la media de los tres
+        // tramos y pasa a ser la correlación ponderada de toda la toma. La
+        // media castiga con 33 puntos un solo tramo malo, que es justo lo que
+        // le pasa a una toma que termina tarde.
+        globalFromSegments: args.contains('--ritglobal') ? false : null,
       );
   final base = override(DtwParams.defaults);
   stdout.writeln('casos: ${cases.length}');

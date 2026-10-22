@@ -31,7 +31,10 @@ void main() {
         // acantilado (§7-nonies).
         expect(p.alignMax, inInclusiveRange(1.0, 2.2), reason: id);
         expect(p.alignNoiseFloor, inInclusiveRange(0.05, 1.0), reason: id);
-        expect(p.alignMax, greaterThanOrEqualTo(p.alignNoiseFloor + 0.4), reason: id);
+        // 0.8 y no 0.4 desde §7-undecies: con 0.54 de recorrido el Right Spot
+        // Turn se volvió un acantilado y una ejecución decente marcaba 13 o 0
+        // de alineación en el teléfono.
+        expect(p.alignMax, greaterThanOrEqualTo(p.alignNoiseFloor + 0.8), reason: id);
         expect(p.alignCurvePower, d.alignCurvePower, reason: id);
         expect(p.coverageZeroRatio, d.coverageZeroRatio, reason: id);
         expect(p.rhythmCorrFull, d.rhythmCorrFull, reason: id);
