@@ -76,7 +76,9 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         builder: (_, state) =>
             ForgotPasswordPage(initialEmail: state.extra as String? ?? ''),
       ),
-      // Shell con Drawer persistente (RF-01).
+      // Shell con Drawer persistente (RF-01). Las pestañas del menú cambian
+      // sin animación: con la transición por defecto de iOS (barrido lateral)
+      // la pantalla anterior seguía encimada ~1 s sobre la nueva.
       ShellRoute(
         navigatorKey: _shellKey,
         builder: (context, state, child) =>
@@ -84,15 +86,18 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         routes: [
           GoRoute(
             path: AppRoutes.catalog,
-            builder: (_, __) => const CatalogPage(),
+            pageBuilder: (_, state) => NoTransitionPage(
+                key: state.pageKey, child: const CatalogPage()),
           ),
           GoRoute(
             path: AppRoutes.profile,
-            builder: (_, __) => const ProfilePage(),
+            pageBuilder: (_, state) => NoTransitionPage(
+                key: state.pageKey, child: const ProfilePage()),
           ),
           GoRoute(
             path: AppRoutes.settings,
-            builder: (_, __) => const SettingsPage(),
+            pageBuilder: (_, state) => NoTransitionPage(
+                key: state.pageKey, child: const SettingsPage()),
           ),
         ],
       ),
@@ -107,8 +112,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '${AppRoutes.pose}/:id',
         parentNavigatorKey: _rootKey,
-        builder: (_, state) =>
-            PosePage(stepId: state.pathParameters['id']!),
+        builder: (_, state) => PosePage(stepId: state.pathParameters['id']!),
       ),
       // Evaluación end-to-end (Fase 5).
       GoRoute(

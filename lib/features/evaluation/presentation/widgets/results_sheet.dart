@@ -131,33 +131,43 @@ class ResultsSheet extends StatelessWidget {
                   ],
                 ),
               ),
+            // Con el relleno por defecto (24 px por lado) y tres botones en
+            // un teléfono angosto, "Reintentar" y "Siguiente" se partían en
+            // dos renglones. Menos relleno y el texto en una sola línea, que
+            // se encoge un poco si aun así no cabe.
             Padding(
-              padding: const EdgeInsets.fromLTRB(24, 8, 24, 16),
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
               child: Row(
                 children: [
                   Expanded(
+                    flex: 4,
                     child: OutlinedButton(
+                      style: _compact,
                       onPressed: () =>
                           Navigator.of(context).pop(ResultsAction.exit),
-                      child: const Text('Salir'),
+                      child: const _OneLine('Salir'),
                     ),
                   ),
-                  const SizedBox(width: 12),
+                  const SizedBox(width: 8),
                   Expanded(
+                    flex: 5,
                     child: FilledButton.tonalIcon(
+                      style: _compact,
                       onPressed: () =>
                           Navigator.of(context).pop(ResultsAction.retry),
-                      icon: const Icon(Icons.replay),
-                      label: const Text('Reintentar'),
+                      icon: const Icon(Icons.replay, size: 18),
+                      label: const _OneLine('Reintentar'),
                     ),
                   ),
-                  const SizedBox(width: 12),
+                  const SizedBox(width: 8),
                   Expanded(
+                    flex: 5,
                     child: FilledButton(
+                      style: _compact,
                       onPressed: hasNext
                           ? () => Navigator.of(context).pop(ResultsAction.next)
                           : null,
-                      child: const Text('Siguiente'),
+                      child: const _OneLine('Siguiente'),
                     ),
                   ),
                 ],
@@ -168,6 +178,26 @@ class ResultsSheet extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Relleno reducido para que quepan los tres botones del reporte en una fila.
+const ButtonStyle _compact = ButtonStyle(
+  padding: WidgetStatePropertyAll(
+    EdgeInsets.symmetric(horizontal: 8, vertical: 12),
+  ),
+  visualDensity: VisualDensity.compact,
+);
+
+/// Texto de botón en una sola línea: se encoge en vez de partirse.
+class _OneLine extends StatelessWidget {
+  const _OneLine(this.text);
+  final String text;
+
+  @override
+  Widget build(BuildContext context) => FittedBox(
+        fit: BoxFit.scaleDown,
+        child: Text(text, maxLines: 1, softWrap: false),
+      );
 }
 
 /// Tarjeta de un tiempo del paso: precisión, alineación, ritmo y consejos.

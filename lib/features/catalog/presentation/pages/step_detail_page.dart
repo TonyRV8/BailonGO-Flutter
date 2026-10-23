@@ -120,8 +120,8 @@ class StepDetailPage extends ConsumerWidget {
               // La evaluación devuelve el id del siguiente paso si el usuario
               // pulsó "Siguiente": esta ficha se sustituye por la del
               // siguiente, como si se hubiera abierto desde el catálogo.
-              final nextId =
-                  await context.push<String>('${AppRoutes.evaluate}/${step.id}');
+              final nextId = await context
+                  .push<String>('${AppRoutes.evaluate}/${step.id}');
               if (nextId != null && context.mounted) {
                 context.pushReplacement('${AppRoutes.step}/$nextId');
               }
@@ -131,8 +131,7 @@ class StepDetailPage extends ConsumerWidget {
           ),
           // Tutorial de uso (dónde poner el teléfono y los gestos).
           TextButton.icon(
-            onPressed: () =>
-                Navigator.of(context).push(TutorialPage.route()),
+            onPressed: () => Navigator.of(context).push(TutorialPage.route()),
             icon: const Icon(Icons.help_outline),
             label: const Text('¿Cómo se usa la evaluación?'),
           ),
@@ -211,8 +210,12 @@ class _VideoPanelState extends State<_VideoPanel>
   bool _muted = false;
   double _speed = 1;
 
-  bool get _hasVideo =>
-      widget.mediaUrl != null && widget.mediaUrl!.isNotEmpty;
+  /// Ver el video como en un espejo, para quien aprende mejor así. Sólo
+  /// cambia cómo se ve aquí: la evaluación compara contra la referencia de
+  /// siempre.
+  bool _mirrored = false;
+
+  bool get _hasVideo => widget.mediaUrl != null && widget.mediaUrl!.isNotEmpty;
 
   @override
   void initState() {
@@ -357,15 +360,24 @@ class _VideoPanelState extends State<_VideoPanel>
                         // Tocar el video también lo pausa o reanuda.
                         GestureDetector(
                           onTap: _togglePlay,
-                          child: FittedBox(
-                            fit: BoxFit.contain,
-                            child: SizedBox(
-                              width: controller.value.size.width,
-                              height: controller.value.size.height,
-                              child: VideoPlayer(controller),
+                          child: Transform.flip(
+                            flipX: _mirrored,
+                            child: FittedBox(
+                              fit: BoxFit.contain,
+                              child: SizedBox(
+                                width: controller.value.size.width,
+                                height: controller.value.size.height,
+                                child: VideoPlayer(controller),
+                              ),
                             ),
                           ),
                         ),
+                        if (_mirrored)
+                          const Positioned(
+                            top: 8,
+                            left: 8,
+                            child: _MirrorBadge(),
+                          ),
                         Positioned(
                           left: 0,
                           right: 0,
@@ -374,8 +386,11 @@ class _VideoPanelState extends State<_VideoPanel>
                             controller: controller,
                             muted: _muted,
                             speed: _speed,
+                            mirrored: _mirrored,
                             onTogglePlay: _togglePlay,
                             onToggleMute: _toggleMute,
+                            onToggleMirror: () =>
+                                setState(() => _mirrored = !_mirrored),
                             onSpeed: _setSpeed,
                           ),
                         ),
@@ -419,16 +434,20 @@ class _VideoControls extends StatefulWidget {
     required this.controller,
     required this.muted,
     required this.speed,
+    required this.mirrored,
     required this.onTogglePlay,
     required this.onToggleMute,
+    required this.onToggleMirror,
     required this.onSpeed,
   });
 
   final VideoPlayerController controller;
   final bool muted;
   final double speed;
+  final bool mirrored;
   final VoidCallback onTogglePlay;
   final VoidCallback onToggleMute;
+  final VoidCallback onToggleMirror;
   final ValueChanged<double> onSpeed;
 
   /// Velocidades disponibles: lentas para aprender el paso con calma.
@@ -550,6 +569,15 @@ class _VideoControlsState extends State<_VideoControls> {
                       ),
                     ),
                     IconButton(
+                      onPressed: widget.onToggleMirror,
+                      tooltip: widget.mirrored
+                          ? 'Quitar modo espejo'
+                          : 'Ver en modo espejo',
+                      color: widget.mirrored ? _MirrorBadge.color : white,
+                      visualDensity: VisualDensity.compact,
+                      icon: const Icon(Icons.flip),
+                    ),
+                    IconButton(
                       onPressed: widget.onToggleMute,
                       tooltip: widget.muted ? 'Activar sonido' : 'Silenciar',
                       color: white,
@@ -563,6 +591,41 @@ class _VideoControlsState extends State<_VideoControls> {
             ),
           );
         },
+      ),
+    );
+  }
+}
+
+/// Aviso sobre el video cuando se ve en modo espejo, para que no se confunda
+/// la izquierda de la profesora con la propia.
+class _MirrorBadge extends StatelessWidget {
+  const _MirrorBadge();
+
+  static const color = Color(0xFFFFD54F);
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: Colors.black54,
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.flip, size: 14, color: color),
+            const SizedBox(width: 4),
+            Text(
+              'Modo espejo',
+              style: Theme.of(context)
+                  .textTheme
+                  .labelSmall
+                  ?.copyWith(color: color, fontWeight: FontWeight.w600),
+            ),
+          ],
+        ),
       ),
     );
   }
