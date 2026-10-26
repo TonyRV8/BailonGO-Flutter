@@ -6,13 +6,16 @@
 /// desincronizarse de los intentos guardados, y los botones de "reiniciar
 /// progreso" (dev) lo dejan en 0 sin tocar nada más.
 class StepStats {
-  const StepStats({this.best, this.attempts = 0});
+  const StepStats({this.best, this.attempts = 0, this.lastAt});
 
   /// Mejor `scores.total` del paso, `null` si aún no hay intentos.
   final double? best;
 
   /// Cuántos intentos evaluados hay guardados de este paso.
   final int attempts;
+
+  /// Cuándo fue el intento más reciente, para sugerir "continúa practicando".
+  final DateTime? lastAt;
 
   static const StepStats empty = StepStats();
 }

@@ -57,11 +57,18 @@ class CatalogRemoteDataSource {
       final snap = await _history.where('uid', isEqualTo: uid).get();
       final best = <String, double>{};
       final count = <String, int>{};
+      final last = <String, DateTime>{};
       for (final doc in snap.docs) {
         final data = doc.data();
         final pasoId = data['pasoId'] as String?;
         if (pasoId == null) continue;
         count[pasoId] = (count[pasoId] ?? 0) + 1;
+        // Un intento recién guardado sin conexión aún no tiene la hora del
+        // servidor: cuenta como "ahora".
+        final ts = data['timestamp'];
+        final at = ts is Timestamp ? ts.toDate() : DateTime.now();
+        final prev = last[pasoId];
+        if (prev == null || at.isAfter(prev)) last[pasoId] = at;
         final total =
             ((data['scores'] as Map<String, dynamic>?)?['total'] as num?)
                 ?.toDouble();
@@ -71,7 +78,11 @@ class CatalogRemoteDataSource {
       }
       return {
         for (final pasoId in count.keys)
-          pasoId: StepStats(best: best[pasoId], attempts: count[pasoId]!),
+          pasoId: StepStats(
+            best: best[pasoId],
+            attempts: count[pasoId]!,
+            lastAt: last[pasoId],
+          ),
       };
     } catch (_) {
       return const {};

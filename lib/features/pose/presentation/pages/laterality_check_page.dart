@@ -28,7 +28,7 @@ import '../widgets/pose_painter.dart';
 class LateralityCheckPage extends ConsumerStatefulWidget {
   const LateralityCheckPage({super.key});
 
-  /// Ruta imperativa: solo se llega desde el catálogo.
+  /// Ruta imperativa: solo se llega desde Configuración.
   static Route<void> route() => MaterialPageRoute<void>(
         builder: (_) => const LateralityCheckPage(),
       );

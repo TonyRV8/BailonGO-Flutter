@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/config/app_constants.dart';
 import '../../../evaluation/presentation/widgets/reset_progress.dart';
+import '../../../pose/presentation/pages/laterality_check_page.dart';
 import '../../../tutorial/presentation/pages/tutorial_page.dart';
 import '../providers/settings_providers.dart';
 
@@ -57,6 +58,18 @@ class SettingsPage extends ConsumerWidget {
           value: settings.mirrorCapture,
           onChanged: (v) =>
               controller.save(settings.copyWith(mirrorCapture: v)),
+        ),
+        // Prueba guiada que dice si hay que activar el interruptor de arriba.
+        // Pantalla completa: fuera del shell con el menú inferior.
+        ListTile(
+          contentPadding: EdgeInsets.zero,
+          leading: const Icon(Icons.swap_horiz),
+          title: const Text('Comprobar izquierda y derecha'),
+          subtitle: const Text(
+              'Levanta el brazo derecho y confirma que la app lo reconoce.'),
+          trailing: const Icon(Icons.chevron_right),
+          onTap: () => Navigator.of(context, rootNavigator: true)
+              .push(LateralityCheckPage.route()),
         ),
         // Arranque automático por quietud (RF-08.3). Desactivable para probar
         // solo el gesto de brazos arriba.

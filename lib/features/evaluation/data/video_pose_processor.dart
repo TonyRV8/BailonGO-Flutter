@@ -11,7 +11,7 @@ import '../engine/feature_extractor.dart';
 class VideoPoseProcessor {
   static const MethodChannel _channel = MethodChannel('bailongo/pose');
 
-  /// Extrae features de un asset empaquetado (p.ej. `assets/videos/ref.mov`).
+  /// Extrae features de un asset empaquetado (p.ej. `assets/videos/cucaracha.mp4`).
   Future<List<List<double>>> processAsset(String assetPath) async {
     final file = await _assetToTempFile(assetPath);
     return processFile(file.path);

@@ -12,7 +12,11 @@ class CatalogRepositoryImpl implements CatalogRepository {
   @override
   Future<List<DanceStep>> getCatalog() async {
     try {
-      final steps = await _remote.fetchCatalog();
+      // Los pasos de prueba pueden seguir en Firestore aunque ya no estén en
+      // el seed: no se muestran.
+      final steps = (await _remote.fetchCatalog())
+          .where((s) => !kTestStepIds.contains(s.id))
+          .toList();
       // Si Firestore aún no está sembrado, usar el seed local (offline-first).
       if (steps.isEmpty) return List<DanceStep>.from(kCatalogSeed);
       return steps;

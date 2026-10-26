@@ -1,9 +1,8 @@
 import '../domain/step_weights.dart';
 import 'models/dance_step_model.dart';
 
-/// Catálogo canónico: 9 pasos WSF nivel Bronce (plan.txt §1, doc 5.7) + un paso
-/// de prueba. Fuente única de verdad: siembra Firestore y sirve de fallback
-/// offline.
+/// Catálogo canónico: 9 pasos WSF nivel Bronce (plan.txt §1, doc 5.7). Fuente
+/// única de verdad: siembra Firestore y sirve de fallback offline.
 ///
 /// Los videos ideales viven empaquetados en `assets/videos/<pasoId>.mp4`
 /// (720x1280, 30 fps, música incluida). De ellos se extraen los landmarks UNA
@@ -110,55 +109,19 @@ const List<DanceStepModel> kCatalogSeed = [
     duracionCicloSeg: 13,
     weights: wKickFlick,
   ),
-  // Paso 10 de PRUEBA: baile de brazos. Usa el video de referencia real
-  // (ref.mov) y pondera el tren superior. Valida el pipeline con good/bad.mov.
-  DanceStepModel(
-    id: 'paso_prueba',
-    nombre: 'Paso de prueba (ref)',
-    descripcion:
-        'Paso de prueba para el pipeline de evaluación. Importan brazos, '
-        'hombros y manos; los intentos good/bad deben dar alta/baja precisión.',
-    orden: 10,
-    mediaUrl: 'assets/videos/ref.mov',
-    duracionCicloSeg: 8,
-    weights: armsWeights,
-  ),
-  // Pasos 11 y 12: copias del paso de prueba para testear la sincronización
-  // de la mejor marca (history) por paso. TEMPORALES: quitar junto con
-  // paso_prueba al sembrar los pasos reales.
-  DanceStepModel(
-    id: 'paso_prueba_2',
-    nombre: 'Paso de prueba 2 (ref)',
-    descripcion:
-        'Copia del paso de prueba para testear la sincronización del mejor '
-        'intento. Importan brazos, hombros y manos.',
-    orden: 11,
-    mediaUrl: 'assets/videos/ref.mov',
-    duracionCicloSeg: 8,
-    weights: armsWeights,
-  ),
-  DanceStepModel(
-    id: 'paso_prueba_3',
-    nombre: 'Paso de prueba 3 (ref)',
-    descripcion:
-        'Copia del paso de prueba para testear la sincronización del mejor '
-        'intento. Importan brazos, hombros y manos.',
-    orden: 12,
-    mediaUrl: 'assets/videos/ref.mov',
-    duracionCicloSeg: 8,
-    weights: armsWeights,
-  ),
 ];
 
-/// Ids de los pasos de prueba (para dev tools: subir referencia / borrar
-/// progreso). TEMPORAL.
-const List<String> kTestStepIds = ['paso_prueba', 'paso_prueba_2', 'paso_prueba_3'];
+/// Ids de los antiguos pasos de prueba. Ya no están en el seed, pero pueden
+/// seguir sembrados en Firestore (CATALOG): el repositorio los descarta al
+/// leer el catálogo.
+const List<String> kTestStepIds = [
+  'paso_prueba',
+  'paso_prueba_2',
+  'paso_prueba_3',
+];
 
-/// Los 9 pasos reales del catálogo (excluye los de prueba). Es lo que usan las
-/// herramientas dev de "Subir referencia" y "Calibrar motor".
-List<DanceStepModel> get kRealSteps => kCatalogSeed
-    .where((s) => !kTestStepIds.contains(s.id))
-    .toList(growable: false);
+/// Los 9 pasos reales del catálogo.
+List<DanceStepModel> get kRealSteps => kCatalogSeed;
 
 /// Ruta del fixture de la toma "regular" (4-6/10) de un paso, usada solo para
 /// calibrar. No se entrega en el APK final (ver .gitignore y pubspec).
