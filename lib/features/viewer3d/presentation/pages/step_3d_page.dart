@@ -5,7 +5,6 @@ import 'package:flutter/material.dart';
 import 'package:model_viewer_plus/model_viewer_plus.dart';
 
 import '../../domain/step_animations.dart';
-import '../controllers/beat_counter.dart';
 import '../controllers/model_viewer_controller.dart';
 
 /// Degradado naranja del fondo del visor (Flutter detrás del WebView
@@ -22,7 +21,6 @@ const _viewerCss = '''
     --poster-color: transparent;
     --progress-bar-color: #FFFFFF;
   }
-${BeatCounter.css}
 ''';
 
 /// Avisa a Flutter cuando `<model-viewer>` termina de cargar el GLB (o falla).
@@ -82,24 +80,10 @@ class _Step3DPageState extends State<Step3DPage> with WidgetsBindingObserver {
   bool _loaded = kIsWeb;
   bool _failed = false;
 
-  /// Conteo de tiempos sobre el maniquí (ver [BeatCounter]); solo si el paso
-  /// tiene animación.
-  late final String? _beatScript = _animation == null
-      ? null
-      : BeatCounter.script(StepAnimations.beatsFor(_animation));
-
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    // En web el `relatedJs` no se ejecuta: el conteo se arranca desde aquí
-    // (el script espera solo a que el visor esté en el documento).
-    final beatScript = _beatScript;
-    if (kIsWeb && beatScript != null) {
-      WidgetsBinding.instance.addPostFrameCallback(
-        (_) => unawaited(_viewer.inject(beatScript)),
-      );
-    }
   }
 
   @override
@@ -151,13 +135,6 @@ class _Step3DPageState extends State<Step3DPage> with WidgetsBindingObserver {
       _loaded = kIsWeb;
       _failed = false;
     });
-    // En web el conteo no viaja en el HTML del visor: se vuelve a inyectar.
-    final beatScript = _beatScript;
-    if (kIsWeb && beatScript != null) {
-      WidgetsBinding.instance.addPostFrameCallback(
-        (_) => unawaited(_viewer.inject(beatScript)),
-      );
-    }
   }
 
   void _selectPreset(CameraPreset preset) {
@@ -211,10 +188,8 @@ class _Step3DPageState extends State<Step3DPage> with WidgetsBindingObserver {
                 shadowIntensity: 1,
                 animationName: _animation,
                 autoPlay: _animation != null,
-                innerModelViewerHtml:
-                    _animation == null ? null : BeatCounter.html,
                 relatedCss: _viewerCss,
-                relatedJs: _viewerJs + (kIsWeb ? '' : _beatScript ?? ''),
+                relatedJs: _viewerJs,
                 javascriptChannels: {
                   JavascriptChannel(
                     _channelName,
@@ -431,9 +406,16 @@ class _CharacterPicker extends StatelessWidget {
   final StepCharacter selected;
   final ValueChanged<StepCharacter> onSelected;
 
+  /// Seleccionado: rosa con texto oscuro. El resto: translúcido sobre el
+  /// panel oscuro con texto blanco. Botones propios y no ChoiceChip: el chip
+  /// pinta debajo el color de fondo del tema, y en modo claro el no
+  /// seleccionado salía blanco con texto blanco.
+  static const _selectedBg = Color(0xFFFFD9E2);
+  static const _selectedFg = Color(0xFF2B1219);
+
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
+    final label = Theme.of(context).textTheme.labelMedium;
     return _Glass(
       padding: const EdgeInsets.all(4),
       radius: 14,
@@ -443,18 +425,33 @@ class _CharacterPicker extends StatelessWidget {
           for (final c in StepAnimations.characters)
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 2),
-              child: ChoiceChip(
-                label: Text(c.label),
-                selected: c == selected,
-                onSelected: (_) => onSelected(c),
-                showCheckmark: false,
-                labelStyle: theme.textTheme.labelMedium?.copyWith(
-                  color: c == selected ? null : Colors.white,
-                  fontWeight: FontWeight.w600,
+              child: Material(
+                color: c == selected
+                    ? _selectedBg
+                    : Colors.white.withValues(alpha: 0.12),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                  side: BorderSide(
+                    color: c == selected
+                        ? _selectedBg
+                        : Colors.white.withValues(alpha: 0.4),
+                  ),
                 ),
-                backgroundColor: Colors.transparent,
-                side: BorderSide(color: Colors.white.withValues(alpha: 0.4)),
-                visualDensity: VisualDensity.compact,
+                clipBehavior: Clip.antiAlias,
+                child: InkWell(
+                  onTap: () => onSelected(c),
+                  child: Padding(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                    child: Text(
+                      c.label,
+                      style: label?.copyWith(
+                        color: c == selected ? _selectedFg : Colors.white,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ),
               ),
             ),
         ],

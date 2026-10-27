@@ -40,26 +40,6 @@ class StepAnimations {
     kickFlick,
   ];
 
-  /// Tiempos musicales que dura un ciclo de cada animación. El número que
-  /// flota sobre el maniquí avanza cada `duración / tiempos` segundos, así que
-  /// basta con esto para que vaya a ritmo (y sigue al slider de velocidad,
-  /// porque se calcula sobre el tiempo de la animación, no sobre el reloj).
-  /// Los pasos de salsa son una frase de 8 tiempos; los que necesitan dos
-  /// frases para cerrar el ciclo (p. ej. la vuelta) duran 16. Sale de
-  /// `tool/anim3d/process.py` (campo `beats` de clean.json): si se regeneran
-  /// las animaciones, se ajusta aquí.
-  static const Map<String, int> _beatsPerLoop = {
-    cucaracha: 16,
-    vuelta: 16,
-    cumbia: 16,
-    toeHeel: 16,
-    kickFlick: 16,
-  };
-  static const int defaultBeatsPerLoop = 8;
-
-  static int beatsFor(String animation) =>
-      _beatsPerLoop[animation] ?? defaultBeatsPerLoop;
-
   /// Coincidencia exacta tras normalizar: ids del catálogo y alias conocidos.
   static const Map<String, String> _exact = {
     // Ids de `kCatalogSeed`.

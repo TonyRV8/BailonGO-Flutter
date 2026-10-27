@@ -79,12 +79,6 @@ void main() {
     });
   }
 
-  test('cada animación tiene un conteo de tiempos válido', () {
-    for (final a in StepAnimations.all) {
-      expect(StepAnimations.beatsFor(a), greaterThan(0), reason: a);
-    }
-  });
-
   test('cada paso WSF del catálogo tiene su animación', () {
     const expected = {
       'basico_adelante_atras': 'basico_3d',
