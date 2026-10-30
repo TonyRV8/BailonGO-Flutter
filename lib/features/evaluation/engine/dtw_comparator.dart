@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 
 import 'dtw_params.dart';
+import 'score_curve.dart';
 import 'dtw_result.dart';
 import 'feature_extractor.dart';
 
@@ -303,15 +304,26 @@ class DtwComparator {
       return math.sqrt(rel * rel + params.offsetWeight * offset * offset);
     }
 
+    // La curva de presentación (`ScoreCurve`) se aplica a CADA componente y
+    // al final del todo, sobre el número que se muestra: después de los
+    // factores de cobertura y espejo. Así la nota sigue siendo exactamente
+    // 60 % alineación + 40 % ritmo (RNF-06) y los números cuadran entre sí,
+    // tanto en el total como en el desglose por tramo.
     int alignScore(double cost, double still, double cov) {
       final base = _costToAlignScore(relWithOffset(cost, still), params);
-      return _applyFactor(
-          base, mirrorFactor * _coverageToFactor(cov, params));
+      return ScoreCurve.applyInt(_applyFactor(
+          base, mirrorFactor * _coverageToFactor(cov, params)));
     }
 
     int rhythmScore(double corrScore, double cov) =>
-        _applyFactor((corrScore * 100).round(),
-            mirrorFactor * _coverageToFactor(cov, params));
+        ScoreCurve.applyInt(_applyFactor((corrScore * 100).round(),
+            mirrorFactor * _coverageToFactor(cov, params)));
+
+    int total(int align, int rhythm) =>
+        (params.alignWeight * align + params.rhythmWeight * rhythm)
+            .round()
+            .clamp(0, 100)
+            .toInt();
 
     // ── Scores por segmento ──────────────────────────────────────────
     final segAlignment = List<int>.generate(3, (s) {
@@ -330,14 +342,8 @@ class DtwComparator {
         (s) => mirrorFactor * _coverageToFactor(coverage.segments[s], params));
     final segRhythm = List<int>.generate(
         3, (s) => rhythmScore(rhythm.segments[s], coverage.segments[s]));
-    final segScore = List<int>.generate(
-      3,
-      (s) => (params.alignWeight * segAlignment[s] +
-              params.rhythmWeight * segRhythm[s])
-          .toInt()
-          .clamp(0, 100)
-          .toInt(),
-    );
+    final segScore =
+        List<int>.generate(3, (s) => total(segAlignment[s], segRhythm[s]));
     final pathDeviation = segDevCount.reduce((a, b) => a + b) > 0
         ? segDevSum.reduce((a, b) => a + b) /
             segDevCount.reduce((a, b) => a + b)
@@ -373,11 +379,7 @@ class DtwComparator {
         ? (segRhythm.reduce((a, b) => a + b) / 3).round()
         : rhythmScore(rhythm.all, coverage.all);
 
-    final finalScore = (params.alignWeight * alignmentScore +
-            params.rhythmWeight * rhythmScoreAll)
-        .toInt()
-        .clamp(0, 100)
-        .toInt();
+    final finalScore = total(alignmentScore, rhythmScoreAll);
 
     final avgLen = (n + m) / 2;
     final normalizedCost = avgLen > 0 ? totalCost / avgLen : 0.0;

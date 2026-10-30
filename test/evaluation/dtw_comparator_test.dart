@@ -66,11 +66,26 @@ void main() {
       for (var s = 0; s < 3; s++) {
         expect(r.segmentComponentErrors[s].length, 15);
         expect(r.segmentSignedErrors[s].length, 15);
-        // Precisión del segmento = RNF-06 sobre los scores del segmento.
-        final expected =
-            (0.6 * r.segmentAlignment[s] + 0.4 * r.segmentRhythm[s]).toInt();
+        // Precisión del segmento = RNF-06 sobre los scores del segmento. La
+        // curva de presentación (`ScoreCurve`) ya está dentro de cada
+        // componente, así que esta relación se cumple exactamente: es lo que
+        // hace que los números del desglose cuadren con el total.
+        final expected = (0.6 * r.segmentAlignment[s] +
+                0.4 * r.segmentRhythm[s])
+            .round()
+            .clamp(0, 100)
+            .toInt();
         expect(r.segmentScore[s], expected);
       }
+      // Y lo mismo en la nota global: lo que se muestra arriba es la misma
+      // cuenta que el desglose.
+      expect(
+        r.score,
+        (0.6 * r.alignmentScore + 0.4 * r.rhythmScore)
+            .round()
+            .clamp(0, 100)
+            .toInt(),
+      );
     });
 
     test('offset positivo -> diferencia señada positiva por componente', () {

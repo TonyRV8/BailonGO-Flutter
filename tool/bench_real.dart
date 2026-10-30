@@ -42,6 +42,7 @@ import 'package:bailongo/features/evaluation/engine/dtw_params.dart';
 import 'package:bailongo/features/evaluation/engine/dtw_result.dart';
 import 'package:bailongo/features/evaluation/engine/feature_extractor.dart';
 import 'package:bailongo/features/evaluation/engine/frame_resampler.dart';
+import 'package:bailongo/features/evaluation/engine/score_curve.dart';
 import 'package:bailongo/features/evaluation/engine/step_params.dart';
 import 'package:bailongo/features/pose/domain/entities/pose_landmark.dart';
 
@@ -429,12 +430,15 @@ int rescore(DtwResult r, DtwParams p) {
     final rel = r.segmentRelativeCost[s];
     if (!rel.isFinite) continue;
     final base = DtwComparator.costToAlignScore(rel, p);
-    sum += (base * r.segmentFactor[s]).round().clamp(0, 100).toInt();
+    // Misma curva que el motor, sobre el número ya mostrado (el ritmo del
+    // resultado ya viene curvado).
+    sum += ScoreCurve.applyInt(
+        (base * r.segmentFactor[s]).round().clamp(0, 100).toInt());
   }
   final align = (sum / 3).round();
   final rhythm = (r.segmentRhythm.reduce((a, b) => a + b) / 3).round();
   return (p.alignWeight * align + p.rhythmWeight * rhythm)
-      .toInt()
+      .round()
       .clamp(0, 100)
       .toInt();
 }
@@ -939,6 +943,24 @@ void main(List<String> args) {
   final stepArg = args.where((a) => a.startsWith('--step=')).toList();
   final only = stepArg.isEmpty ? null : {stepArg.first.substring(7)};
   kHighPriority = args.contains('--priorizaalto');
+  // --sincurva: notas sin la curva de presentación, para comparar.
+  //
+  // Los modos de AJUSTE la apagan siempre: la curva es una decisión de escala
+  // tomada DESPUÉS de calibrar y, si el ajuste la viera, movería los umbrales
+  // para cancelarla y volveríamos al punto de partida. Los umbrales se buscan
+  // contra la nota medida; la curva se aplica encima.
+  final ajustando = args.any((a) => const [
+        '--fit',
+        '--fitglobal',
+        '--sweep',
+        '--wsweep',
+        '--perfeature',
+        '--sep',
+      ].contains(a));
+  ScoreCurve.enabled = !args.contains('--sincurva') && !ajustando;
+  if (ajustando) {
+    stdout.writeln('(ajuste: curva de presentación DESACTIVADA)');
+  }
   final peso = args.where((a) => a.startsWith('--peso10=')).toList();
   if (peso.isNotEmpty) kPeso10 = double.parse(peso.first.substring(9));
   final labels = loadLabels('tool/labels.json');

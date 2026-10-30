@@ -52,6 +52,14 @@ import 'dtw_params.dart';
 /// Cuesta orden: el acuerdo de rangos entre alumnos baja de 0.34 a 0.29,
 /// porque comprimir la escala hacia arriba junta tomas que antes separaba.
 ///
+/// ENCIMA DE TODO ESTO va `ScoreCurve` (§7-duodecies): un remapeo monótono
+/// de la nota final, decidido tras probar la app, que baja 5-8 puntos la zona
+/// media y sube el tramo alto para que el 90-100 sea alcanzable. No cambia el
+/// orden de ningún par de intentos ni toca los umbrales de aquí abajo, y el
+/// ajuste la apaga para no perseguirse la cola. Los números que siguen son de
+/// la escala MEDIDA, sin esa curva; con ella las tomas de 10 quedan en 91 de
+/// media (80-99) y los bailes ajenos en 18.
+///
 /// Resultado en el banco (163 casos con nota, 76 en banda, media por grupo):
 ///   referencia 100 · captura real de ella 100 · retrasada 99 · tomas de 10
 ///   de la profesora 90 (81-96) · 10 % más lenta 93 · toma regular 78
