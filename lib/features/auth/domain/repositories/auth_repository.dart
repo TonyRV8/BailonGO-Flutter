@@ -32,6 +32,9 @@ abstract interface class AuthRepository {
     required String newPassword,
   });
 
+  /// Elimina la cuenta y todos sus datos, confirmando antes la contraseña.
+  Future<void> deleteAccount({required String password});
+
   /// Cierra la sesión.
   Future<void> signOut();
 }

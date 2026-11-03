@@ -1,7 +1,7 @@
 name: bailongo
 description: "BailonGO — aprendizaje y evaluación de pasos de baile (WSF Bronce) con visión por computadora."
 publish_to: "none"
-version: 0.1.0+1
+version: 1.0.0+3
 
 environment:
   sdk: ">=3.4.0 <4.0.0"
@@ -42,6 +42,9 @@ dependencies:
   model_viewer_plus: ^1.10.0
   webview_flutter: ^4.14.1
 
+  # Abre la política de privacidad (Configuración) en el navegador.
+  url_launcher: ^6.3.0
+
   # Fases posteriores (se activan al llegar a su fase):
   # hive: ^2.2.3
   # hive_flutter: ^1.1.0
@@ -60,7 +63,22 @@ flutter:
     enable-swift-package-manager: false
   assets:
     - assets/videos/
-    - assets/fixtures/ # ref/good/bad.mov para validar el motor (dev)
-    - assets/sounds/
+    # assets/fixtures/ (tomas de prueba para calibrar) NO va en la app: los
+    # scripts de tool/ las leen directo del disco.
+    # Sonidos uno por uno para dejar fuera musica.mp3 (pista original de la que
+    # sale musica_intento.m4a; la app no la usa).
+    - assets/sounds/tick.wav
+    - assets/sounds/go.wav
+    - assets/sounds/musica_intento.m4a
+    - assets/sounds/audio_guia_cucaracha.mp3
+    - assets/sounds/basico_adelante_atras.m4a
+    - assets/sounds/basico_guapeo.m4a
+    - assets/sounds/cuban_break.m4a
+    - assets/sounds/cucaracha.m4a
+    - assets/sounds/cumbia_step.m4a
+    - assets/sounds/giro_punta_talon.m4a
+    - assets/sounds/kick_flick.m4a
+    - assets/sounds/right_spot_turn.m4a
+    - assets/sounds/suzy_q.m4a
     - assets/references/ # landmarks de las tomas ideales (tool/build_references.py)
     - assets/models/ # DanceGrid1.glb: maniquí 3D + pista con dance grid, una animación por paso

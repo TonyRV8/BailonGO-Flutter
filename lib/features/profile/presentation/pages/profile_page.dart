@@ -9,6 +9,7 @@ import '../../../../core/router/app_routes.dart';
 import '../../../auth/domain/entities/app_user.dart';
 import '../../../auth/presentation/providers/auth_providers.dart';
 import '../../../auth/presentation/widgets/change_password_dialog.dart';
+import '../../../auth/presentation/widgets/delete_account_dialog.dart';
 import '../../../catalog/domain/entities/dance_step.dart';
 import '../../../catalog/domain/entities/step_stats.dart';
 import '../../../catalog/presentation/providers/catalog_providers.dart';
@@ -76,6 +77,16 @@ class _Header extends ConsumerWidget {
     if (changed == true) {
       messenger.showSnackBar(
           const SnackBar(content: Text('Contraseña actualizada.')));
+    }
+  }
+
+  /// Al eliminarse, la sesión se cierra y el router lleva al login.
+  Future<void> _deleteAccount(BuildContext context) async {
+    final messenger = ScaffoldMessenger.of(context);
+    final deleted = await DeleteAccountDialog.show(context);
+    if (deleted == true) {
+      messenger.showSnackBar(
+          const SnackBar(content: Text('Tu cuenta se eliminó.')));
     }
   }
 
@@ -164,6 +175,12 @@ class _Header extends ConsumerWidget {
           onPressed: () => _changePassword(context),
           icon: const Icon(Icons.lock_reset),
           label: const Text('Cambiar contraseña'),
+        ),
+        TextButton.icon(
+          onPressed: () => _deleteAccount(context),
+          style: TextButton.styleFrom(foregroundColor: theme.colorScheme.error),
+          icon: const Icon(Icons.person_remove_outlined),
+          label: const Text('Eliminar cuenta'),
         ),
       ],
     );

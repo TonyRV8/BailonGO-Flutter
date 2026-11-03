@@ -50,6 +50,14 @@ class ChangePassword {
       );
 }
 
+class DeleteAccount {
+  const DeleteAccount(this._repo);
+  final AuthRepository _repo;
+
+  Future<void> call({required String password}) =>
+      _repo.deleteAccount(password: password);
+}
+
 class SignOut {
   const SignOut(this._repo);
   final AuthRepository _repo;

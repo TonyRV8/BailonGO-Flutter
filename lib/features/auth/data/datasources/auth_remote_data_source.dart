@@ -1,20 +1,27 @@
+import 'dart:async';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_storage/firebase_storage.dart';
 
 import '../../../../core/config/app_constants.dart';
 import '../../../../core/error/exceptions.dart';
 import '../models/app_user_model.dart';
 
 /// Fuente de datos remota: Firebase Auth (credenciales) + Firestore (perfil).
+/// Storage solo se usa al eliminar la cuenta (borra la foto de perfil).
 class AuthRemoteDataSource {
   AuthRemoteDataSource({
     required FirebaseAuth auth,
     required FirebaseFirestore firestore,
+    required FirebaseStorage storage,
   })  : _auth = auth,
-        _firestore = firestore;
+        _firestore = firestore,
+        _storage = storage;
 
   final FirebaseAuth _auth;
   final FirebaseFirestore _firestore;
+  final FirebaseStorage _storage;
 
   CollectionReference<Map<String, dynamic>> get _users =>
       _firestore.collection(AppConstants.usersCollection);
@@ -101,18 +108,7 @@ class AuthRemoteDataSource {
     required String currentPassword,
     required String newPassword,
   }) async {
-    final user = _auth.currentUser;
-    final email = user?.email;
-    if (user == null || email == null || email.isEmpty) {
-      throw AuthException('Tu sesión expiró. Inicia sesión de nuevo.');
-    }
-    try {
-      await user.reauthenticateWithCredential(
-        EmailAuthProvider.credential(email: email, password: currentPassword),
-      );
-    } on FirebaseAuthException catch (e) {
-      throw AuthException(_mapReauthError(e), code: e.code);
-    }
+    final user = await _reauthenticate(currentPassword);
     try {
       await user.updatePassword(newPassword);
     } on FirebaseAuthException catch (e) {
@@ -122,7 +118,64 @@ class AuthRemoteDataSource {
     }
   }
 
+  /// Elimina la cuenta (requisito de Google Play). Confirma la contraseña,
+  /// borra los intentos (HISTORY), el perfil (USERS) y la foto, y al final el
+  /// usuario de Firebase Auth. Al quedar sin sesión, el router manda al login.
+  /// Necesita red: el borrado no puede quedarse pendiente en la cache local.
+  Future<void> deleteAccount({required String password}) async {
+    final user = await _reauthenticate(password);
+    try {
+      await _deleteUserData(user.uid).timeout(const Duration(seconds: 30));
+      await user.delete();
+    } on FirebaseAuthException catch (e) {
+      throw AuthException(_mapAuthError(e), code: e.code);
+    } on TimeoutException {
+      throw AuthException('Sin conexión a la red.');
+    } catch (e) {
+      throw AuthException('No se pudo eliminar la cuenta: $e');
+    }
+  }
+
+  Future<void> _deleteUserData(String uid) async {
+    final history = await _firestore
+        .collection(AppConstants.historyCollection)
+        .where('uid', isEqualTo: uid)
+        .get(const GetOptions(source: Source.server));
+    // Un batch admite hasta 500 operaciones.
+    for (var i = 0; i < history.docs.length; i += 400) {
+      final batch = _firestore.batch();
+      for (final doc in history.docs.skip(i).take(400)) {
+        batch.delete(doc.reference);
+      }
+      await batch.commit();
+    }
+    await _users.doc(uid).delete();
+    try {
+      await _storage.ref('profile_photos/$uid.jpg').delete();
+    } on FirebaseException {
+      // Sin foto (object-not-found): no impide borrar la cuenta.
+    }
+  }
+
   Future<void> signOut() => _auth.signOut();
+
+  /// Firebase exige un inicio de sesión reciente para cambiar la contraseña o
+  /// borrar la cuenta: se confirma la contraseña actual antes.
+  Future<User> _reauthenticate(String password) async {
+    final user = _auth.currentUser;
+    final email = user?.email;
+    if (user == null || email == null || email.isEmpty) {
+      throw AuthException('Tu sesión expiró. Inicia sesión de nuevo.');
+    }
+    try {
+      await user.reauthenticateWithCredential(
+        EmailAuthProvider.credential(email: email, password: password),
+      );
+    } on FirebaseAuthException catch (e) {
+      throw AuthException(_mapReauthError(e), code: e.code);
+    }
+    return user;
+  }
 
   /// Lee el perfil de Firestore; si aún no existe (p.ej. registro a medias),
   /// regresa un modelo básico con los datos de Auth.

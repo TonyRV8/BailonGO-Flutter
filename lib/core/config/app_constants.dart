@@ -4,6 +4,11 @@ class AppConstants {
 
   static const String appName = 'BailonGO';
 
+  /// Política de privacidad pública (Firebase Hosting, carpeta `legal/`).
+  /// Play Store exige enlazarla en la ficha y dentro de la app.
+  static const String privacyPolicyUrl =
+      'https://bailongo-f3384.web.app/privacidad';
+
   // Nombres de colecciones Firestore (doc 5.3.3 / Figura 7).
   static const String usersCollection = 'users';
   static const String catalogCollection = 'catalog';

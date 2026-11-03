@@ -98,3 +98,9 @@ Thumbs.db
 
 # Visor 3D: modelo MediaPipe heavy (se descarga solo, ver tool/anim3d/extract_world.py)
 tool/anim3d/pose_landmarker_heavy.task
+
+# Builds firmados para Play Store (pesan ~145 MB; se suben a mano a la consola)
+/release/
+
+# Cache local de Firebase Hosting (se regenera en cada deploy)
+.firebase/

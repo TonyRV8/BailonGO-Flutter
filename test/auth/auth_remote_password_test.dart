@@ -2,9 +2,12 @@ import 'package:bailongo/core/error/exceptions.dart';
 import 'package:bailongo/features/auth/data/datasources/auth_remote_data_source.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 class _FakeFirestore extends Fake implements FirebaseFirestore {}
+
+class _FakeStorage extends Fake implements FirebaseStorage {}
 
 class _FakeUserCredential extends Fake implements UserCredential {}
 
@@ -60,7 +63,8 @@ void main() {
 
   setUp(() {
     auth = _FakeAuth();
-    source = AuthRemoteDataSource(auth: auth, firestore: _FakeFirestore());
+    source = AuthRemoteDataSource(
+        auth: auth, firestore: _FakeFirestore(), storage: _FakeStorage());
   });
 
   Matcher authError(String message) =>
@@ -131,6 +135,26 @@ void main() {
       await expectLater(
           source.changePassword(
               currentPassword: 'vieja123', newPassword: 'nueva456'),
+          throwsA(authError('Tu sesión expiró. Inicia sesión de nuevo.')));
+    });
+  });
+
+  group('eliminar cuenta', () {
+    late _FakeUser user;
+
+    setUp(() => auth.currentUser = user = _FakeUser('ana@mail.com'));
+
+    test('contraseña incorrecta no borra nada', () async {
+      user.reauthError = FirebaseAuthException(code: 'invalid-credential');
+      // Firestore/Storage falsos fallarían si se tocaran.
+      await expectLater(source.deleteAccount(password: 'mala'),
+          throwsA(authError('La contraseña actual es incorrecta.')));
+      expect(user.calls, ['reauth ana@mail.com mala']);
+    });
+
+    test('sin sesión pide volver a entrar', () async {
+      auth.currentUser = null;
+      await expectLater(source.deleteAccount(password: 'vieja123'),
           throwsA(authError('Tu sesión expiró. Inicia sesión de nuevo.')));
     });
   });

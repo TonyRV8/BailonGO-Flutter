@@ -45,6 +45,14 @@ class FakeAuthRepository implements AuthRepository {
   }) =>
       throw UnimplementedError();
 
+  final deletedWith = <String>[];
+
+  @override
+  Future<void> deleteAccount({required String password}) async {
+    if (failWith != null) throw AuthException(failWith!);
+    deletedWith.add(password);
+  }
+
   @override
   Future<void> signOut() async {}
 }

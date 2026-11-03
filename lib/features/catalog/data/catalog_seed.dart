@@ -122,8 +122,3 @@ const List<String> kTestStepIds = [
 
 /// Los 9 pasos reales del catálogo.
 List<DanceStepModel> get kRealSteps => kCatalogSeed;
-
-/// Ruta del fixture de la toma "regular" (4-6/10) de un paso, usada solo para
-/// calibrar. No se entrega en el APK final (ver .gitignore y pubspec).
-String regularFixtureFor(String pasoId) =>
-    'assets/fixtures/${pasoId}_regular.mp4';

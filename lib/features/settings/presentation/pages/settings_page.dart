@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../../../core/config/app_constants.dart';
 import '../../../evaluation/presentation/widgets/reset_progress.dart';
@@ -108,6 +109,17 @@ class SettingsPage extends ConsumerWidget {
               'reintentar.'),
           onTap: () => Navigator.of(context, rootNavigator: true)
               .push(TutorialPage.route()),
+        ),
+        const SizedBox(height: 16),
+        Text('Acerca de', style: Theme.of(context).textTheme.titleMedium),
+        ListTile(
+          contentPadding: EdgeInsets.zero,
+          leading: const Icon(Icons.privacy_tip_outlined),
+          title: const Text('Política de privacidad'),
+          subtitle: const Text('Qué datos guarda la app y cómo borrarlos.'),
+          trailing: const Icon(Icons.open_in_new),
+          onTap: () => launchUrl(Uri.parse(AppConstants.privacyPolicyUrl),
+              mode: LaunchMode.externalApplication),
         ),
         // Herramientas de desarrollo: solo en builds debug.
         if (kDebugMode) ...[
