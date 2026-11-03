@@ -70,15 +70,15 @@ flutter:
     - assets/sounds/tick.wav
     - assets/sounds/go.wav
     - assets/sounds/musica_intento.m4a
+    # Voz guía de cada paso (lib/features/evaluation/domain/voice_guides.dart).
+    - assets/sounds/audio_guia_basico_adelante_atras.mp3
+    - assets/sounds/audio_guia_basico_guapeo.mp3
+    - assets/sounds/audio_guia_cuban_break.mp3
     - assets/sounds/audio_guia_cucaracha.mp3
-    - assets/sounds/basico_adelante_atras.m4a
-    - assets/sounds/basico_guapeo.m4a
-    - assets/sounds/cuban_break.m4a
-    - assets/sounds/cucaracha.m4a
-    - assets/sounds/cumbia_step.m4a
-    - assets/sounds/giro_punta_talon.m4a
-    - assets/sounds/kick_flick.m4a
-    - assets/sounds/right_spot_turn.m4a
-    - assets/sounds/suzy_q.m4a
+    - assets/sounds/audio_guia_cumbia_step.mp3
+    - assets/sounds/audio_guia_giro_punta_talon.mp3
+    - assets/sounds/audio_guia_kick_flick.mp3
+    - assets/sounds/audio_guia_right_spot_turn.mp3
+    - assets/sounds/audio_guia_suzy_q.mp3
     - assets/references/ # landmarks de las tomas ideales (tool/build_references.py)
     - assets/models/ # DanceGrid1.glb: maniquí 3D + pista con dance grid, una animación por paso

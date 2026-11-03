@@ -1,11 +1,14 @@
+import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:video_player/video_player.dart';
 
+import '../../../../core/config/app_constants.dart';
 import '../../../../core/router/app_router.dart';
 import '../../../../core/router/app_routes.dart';
+import '../../../evaluation/domain/voice_guides.dart';
 import '../../../evaluation/presentation/widgets/reset_progress.dart';
 import '../../../settings/presentation/providers/settings_providers.dart';
 import '../../../tutorial/presentation/pages/tutorial_page.dart';
@@ -41,7 +44,7 @@ class StepDetailPage extends ConsumerWidget {
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          _VideoPanel(mediaUrl: step.mediaUrl),
+          _VideoPanel(stepId: step.id, mediaUrl: step.mediaUrl),
           const SizedBox(height: 16),
           Text(step.nombre, style: theme.textTheme.headlineSmall),
           const SizedBox(height: 4),
@@ -184,16 +187,17 @@ class _StatValue extends StatelessWidget {
 
 /// Video del modelo ideal en bucle (RF-07). Reproduce desde asset
 /// (`assets/...`) o URL remota. Si no hay `mediaUrl`, muestra un marcador.
-class _VideoPanel extends StatefulWidget {
-  const _VideoPanel({required this.mediaUrl});
+class _VideoPanel extends ConsumerStatefulWidget {
+  const _VideoPanel({required this.stepId, required this.mediaUrl});
 
+  final String stepId;
   final String? mediaUrl;
 
   @override
-  State<_VideoPanel> createState() => _VideoPanelState();
+  ConsumerState<_VideoPanel> createState() => _VideoPanelState();
 }
 
-class _VideoPanelState extends State<_VideoPanel>
+class _VideoPanelState extends ConsumerState<_VideoPanel>
     with WidgetsBindingObserver, RouteAware {
   VideoPlayerController? _controller;
   bool _failed = false;
@@ -217,10 +221,46 @@ class _VideoPanelState extends State<_VideoPanel>
 
   bool get _hasVideo => widget.mediaUrl != null && widget.mediaUrl!.isNotEmpty;
 
+  // Voz guía del paso (conteo + instrucciones), en un reproductor aparte que
+  // sigue al video. Está grabada sobre la misma música desde su segundo 0,
+  // que es el fotograma 0 del video: basta con llevarla a la posición del
+  // video en cada play, vuelta del bucle o arrastre de la línea de tiempo.
+  final AudioPlayer _voice = AudioPlayer();
+
+  /// Pista cargada y lista; null si el paso no tiene voz o no se pudo cargar.
+  Duration? _voiceDuration;
+
+  /// Interruptor de Configuración "Voz guía en el video del paso".
+  bool _voiceEnabled = true;
+
+  bool get _voiceOn => _voiceEnabled && _voiceDuration != null;
+
+  /// Evita que dos sincronizaciones se pisen: el controlador del video
+  /// notifica varias veces por segundo y cada una espera al nativo.
+  bool _syncing = false;
+
+  /// Tras recolocar la voz se deja un margen antes de volver a medir el
+  /// desfase: el arranque nativo tarda y se tomaría por desfase nuevo.
+  DateTime _voiceSettledAt = DateTime.fromMillisecondsSinceEpoch(0);
+
+  /// Desfase tolerado entre voz y video antes de recolocar la voz.
+  static const _maxDrift = Duration(milliseconds: 200);
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    _voiceEnabled = ref.read(currentSettingsProvider).voiceGuideInPreview;
+    // Los ajustes llegan del servidor después de abrir la ficha, y pueden
+    // cambiarse desde Configuración con la ficha abierta debajo.
+    ref.listenManual(
+      currentSettingsProvider.select((s) => s.voiceGuideInPreview),
+      (_, enabled) {
+        _voiceEnabled = enabled;
+        _applyVolumes();
+        _syncVoice();
+      },
+    );
     if (_hasVideo) _initVideo();
   }
 
@@ -253,6 +293,8 @@ class _VideoPanelState extends State<_VideoPanel>
   void didChangeAppLifecycleState(AppLifecycleState state) {
     // Volver del segundo plano con la evaluación abierta no debe reanudarlo.
     if (state == AppLifecycleState.resumed && !_covered) _resume();
+    // El video se pausa solo al pasar a segundo plano; la voz no.
+    if (state == AppLifecycleState.paused) _pauseVoice();
   }
 
   /// Reanuda el bucle si quedó pausado. El reproductor de Android pausa al
@@ -280,16 +322,113 @@ class _VideoPanelState extends State<_VideoPanel>
         : VideoPlayerController.networkUrl(Uri.parse(url));
     _controller = controller;
     try {
+      // La voz se carga antes de arrancar el video para que entre desde el
+      // primer tiempo.
+      await _initVoice();
       await controller.initialize();
       await controller.setLooping(true);
       // El video lleva la música incrustada: suena y se repite con cada
       // vuelta del bucle (setLooping ya está activo).
-      await controller.setVolume(1);
+      await _applyVolumes();
+      // Cada notificación del video (play, pausa, posición, vuelta del bucle)
+      // revisa que la voz vaya a la par.
+      controller.addListener(_syncVoice);
       // Si mientras cargaba ya se abrió la evaluación, no arrancar debajo.
       if (!_covered) await controller.play();
       if (mounted) setState(() {});
     } catch (_) {
       if (mounted) setState(() => _failed = true);
+    }
+  }
+
+  Future<void> _initVoice() async {
+    final path = kVoiceGuides[widget.stepId];
+    if (path == null) return;
+    try {
+      // Sin robar el foco de audio: con el foco por defecto el reproductor
+      // del video se pausaría al arrancar la voz.
+      await AudioPlayer.global.setAudioContext(
+        AudioContextConfig(focus: AudioContextConfigFocus.mixWithOthers)
+            .build(),
+      );
+      await _voice.setReleaseMode(ReleaseMode.stop);
+      await _voice.setSource(AssetSource(path));
+      _voiceDuration = await _voice.getDuration();
+    } catch (_) {
+      // Sin voz: el video sigue igual, solo con su música.
+      _voiceDuration = null;
+    }
+  }
+
+  /// Mezcla como en la evaluación: con voz guía la música del video baja para
+  /// dejarle sitio. "Silenciar" apaga las dos.
+  Future<void> _applyVolumes() async {
+    final controller = _controller;
+    try {
+      await controller?.setVolume(_muted
+          ? 0
+          : _voiceOn
+              ? AppConstants.musicUnderVoiceVolume
+              : AppConstants.musicSoloVolume);
+      if (_voiceDuration != null) {
+        await _voice.setVolume(_muted ? 0 : AppConstants.voiceGuideVolume);
+      }
+    } catch (_) {
+      // Reproductor ya liberado.
+    }
+  }
+
+  /// Lleva la voz a donde va el video: la pausa si el video no corre, la
+  /// arranca en su posición si corre, y la recoloca si se desfasó (vuelta del
+  /// bucle, arrastre de la línea de tiempo o arranque tardío).
+  Future<void> _syncVoice() async {
+    final controller = _controller;
+    if (_syncing || !mounted || controller == null) return;
+    if (_voiceDuration == null) return;
+    _syncing = true;
+    try {
+      final value = controller.value;
+      if (!_voiceOn || _covered || !value.isPlaying || !value.isInitialized) {
+        await _pauseVoice();
+        return;
+      }
+      // `value.position` se actualiza solo cada medio segundo; se pide la
+      // posición exacta al nativo.
+      final videoPos = await controller.position ?? value.position;
+      final playing = _voice.state == PlayerState.playing;
+      // La voz puede ser más corta que el video: pasado su final se calla
+      // hasta la siguiente vuelta.
+      final voiceEnd = _voiceDuration! - const Duration(milliseconds: 100);
+      if (videoPos >= voiceEnd) {
+        if (playing) await _voice.pause();
+        return;
+      }
+      if (playing) {
+        if (DateTime.now().isBefore(_voiceSettledAt)) return;
+        final voicePos = await _voice.getCurrentPosition();
+        if (voicePos != null && (voicePos - videoPos).abs() <= _maxDrift) {
+          return;
+        }
+      }
+      await _voice.seek(videoPos);
+      if (!playing) {
+        await _voice.setPlaybackRate(_speed);
+        await _voice.resume();
+      }
+      _voiceSettledAt = DateTime.now().add(const Duration(seconds: 1));
+    } catch (_) {
+      // La voz es un apoyo: si falla, el video sigue igual.
+    } finally {
+      _syncing = false;
+    }
+  }
+
+  Future<void> _pauseVoice() async {
+    if (_voice.state != PlayerState.playing) return;
+    try {
+      await _voice.pause();
+    } catch (_) {
+      // Reproductor ya liberado.
     }
   }
 
@@ -310,7 +449,7 @@ class _VideoPanelState extends State<_VideoPanel>
     final controller = _controller;
     if (controller == null) return;
     setState(() => _muted = !_muted);
-    await controller.setVolume(_muted ? 0 : 1);
+    await _applyVolumes();
   }
 
   Future<void> _setSpeed(double speed) async {
@@ -318,13 +457,23 @@ class _VideoPanelState extends State<_VideoPanel>
     if (controller == null) return;
     setState(() => _speed = speed);
     await controller.setPlaybackSpeed(speed);
+    // La voz se ralentiza igual que el video para seguir marcando sus tiempos.
+    if (_voiceDuration != null) {
+      try {
+        await _voice.setPlaybackRate(speed);
+      } catch (_) {
+        // Sin cambio de velocidad en la voz: la resincronización la recoloca.
+      }
+    }
   }
 
   @override
   void dispose() {
     routeObserver.unsubscribe(this);
     WidgetsBinding.instance.removeObserver(this);
+    _controller?.removeListener(_syncVoice);
     _controller?.dispose();
+    _voice.dispose();
     super.dispose();
   }
 

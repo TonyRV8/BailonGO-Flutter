@@ -22,6 +22,7 @@ import '../../../pose/presentation/widgets/pose_painter.dart';
 import '../../../settings/presentation/providers/settings_providers.dart';
 import '../../domain/evaluation_feedback.dart';
 import '../../domain/step_cues.dart';
+import '../../domain/voice_guides.dart';
 import '../../engine/dtw_comparator.dart';
 import '../../engine/step_params.dart';
 import '../../engine/dtw_result.dart';
@@ -149,21 +150,18 @@ class _EvaluationPageState extends ConsumerState<EvaluationPage>
   /// Solo los pasos reales van sobre ese tema; los de prueba usan otro video.
   bool get _hasMusic => kRealStepIds.contains(widget.stepId);
 
-  // Voz guía (conteo + instrucciones) que suena a la vez que la música. Cada
-  // pista está grabada sobre `musica_intento.m4a` desde su segundo 0, así que
-  // ambas arrancan juntas en el ¡YA!. Los pasos sin entrada aquí van solo con
-  // música.
-  static const Map<String, String> _voiceGuides = {
-    'cucaracha': 'sounds/audio_guia_cucaracha.mp3',
-  };
+  // Voz guía (conteo + instrucciones) que suena a la vez que la música: ambas
+  // arrancan juntas en el ¡YA! (ver [kVoiceGuides]). Se puede apagar desde
+  // Configuración.
   final AudioPlayer _voicePlayer = AudioPlayer(playerId: 'step_voice');
 
   AssetSource? get _voiceGuide {
-    final path = _voiceGuides[widget.stepId];
+    if (!ref.read(currentSettingsProvider).voiceGuideInEvaluation) return null;
+    final path = kVoiceGuides[widget.stepId];
     return path == null ? null : AssetSource(path);
   }
 
-  bool get _hasVoice => _voiceGuides.containsKey(widget.stepId);
+  bool get _hasVoice => _voiceGuide != null;
 
   // Pulso de entrada de cada numero del conteo.
   late final AnimationController _pulse;
@@ -196,11 +194,8 @@ class _EvaluationPageState extends ConsumerState<EvaluationPage>
         // Precarga para que el primer pitido no llegue tarde.
         await e.key.setSource(e.value);
       }
-      // Mezcla fija: con voz guía la música baja para dejarle sitio.
       await _musicPlayer.setReleaseMode(ReleaseMode.stop);
-      await _musicPlayer.setVolume(_hasVoice
-          ? AppConstants.musicUnderVoiceVolume
-          : AppConstants.musicSoloVolume);
+      await _setMusicMix();
       if (_hasMusic) await _musicPlayer.setSource(_attemptMusic);
       await _voicePlayer.setReleaseMode(ReleaseMode.stop);
       await _voicePlayer.setVolume(AppConstants.voiceGuideVolume);
@@ -500,9 +495,16 @@ class _EvaluationPageState extends ConsumerState<EvaluationPage>
         if (_voiceGuide case final voice?) _voicePlayer: voice,
       };
 
+  /// Mezcla fija: con voz guía la música baja para dejarle sitio. Se vuelve a
+  /// aplicar en cada intento por si la voz se activó o apagó en Configuración.
+  Future<void> _setMusicMix() => _musicPlayer.setVolume(_hasVoice
+      ? AppConstants.musicUnderVoiceVolume
+      : AppConstants.musicSoloVolume);
+
   /// Detiene lo que sonara y deja cada pista cargada al principio.
   Future<void> _prepareStepMusic() async {
     await Future.wait([
+      _guard(_setMusicMix),
       for (final e in _attemptTracks.entries)
         _guard(() async {
           await e.key.stop();

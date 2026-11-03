@@ -98,6 +98,28 @@ class SettingsPage extends ConsumerWidget {
           value: settings.showCues,
           onChanged: (v) => controller.save(settings.copyWith(showCues: v)),
         ),
+        // Voz guía (conteo + instrucciones) sobre la música del paso.
+        SwitchListTile(
+          contentPadding: EdgeInsets.zero,
+          secondary: const Icon(Icons.record_voice_over_outlined),
+          title: const Text('Voz guía durante la evaluación'),
+          subtitle: const Text(
+              'Cuenta los tiempos y te dice qué hacer mientras bailas. '
+              'Apágala para bailar solo con la música.'),
+          value: settings.voiceGuideInEvaluation,
+          onChanged: (v) =>
+              controller.save(settings.copyWith(voiceGuideInEvaluation: v)),
+        ),
+        SwitchListTile(
+          contentPadding: EdgeInsets.zero,
+          secondary: const Icon(Icons.ondemand_video_outlined),
+          title: const Text('Voz guía en el video del paso'),
+          subtitle: const Text(
+              'Suena junto a la música del video en la ficha de cada paso.'),
+          value: settings.voiceGuideInPreview,
+          onChanged: (v) =>
+              controller.save(settings.copyWith(voiceGuideInPreview: v)),
+        ),
         // Tutorial de uso: se muestra solo antes de la primera evaluación;
         // aquí se puede volver a ver cuando se quiera.
         ListTile(

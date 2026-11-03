@@ -7,6 +7,8 @@ class UserSettings {
     this.mirrorCapture = false,
     this.autoStartOnStill = true,
     this.showCues = true,
+    this.voiceGuideInEvaluation = true,
+    this.voiceGuideInPreview = true,
     this.tutorialSeen = false,
   });
 
@@ -26,6 +28,12 @@ class UserSettings {
   /// apagar para evaluar sin ayudas.
   final bool showCues;
 
+  /// Voz guía (conteo + instrucciones) junto a la música durante el intento.
+  final bool voiceGuideInEvaluation;
+
+  /// Voz guía junto a la música del video del paso, en su ficha.
+  final bool voiceGuideInPreview;
+
   /// Ya vio el tutorial de uso: no se vuelve a mostrar solo antes de evaluar
   /// (sigue disponible desde la ficha del paso y Configuración).
   final bool tutorialSeen;
@@ -38,6 +46,9 @@ class UserSettings {
       mirrorCapture: (map['mirrorCapture'] as bool?) ?? false,
       autoStartOnStill: (map['autoStartOnStill'] as bool?) ?? true,
       showCues: (map['showCues'] as bool?) ?? true,
+      voiceGuideInEvaluation:
+          (map['voiceGuideInEvaluation'] as bool?) ?? true,
+      voiceGuideInPreview: (map['voiceGuideInPreview'] as bool?) ?? true,
       tutorialSeen: (map['tutorialSeen'] as bool?) ?? false,
     );
   }
@@ -47,6 +58,8 @@ class UserSettings {
         'mirrorCapture': mirrorCapture,
         'autoStartOnStill': autoStartOnStill,
         'showCues': showCues,
+        'voiceGuideInEvaluation': voiceGuideInEvaluation,
+        'voiceGuideInPreview': voiceGuideInPreview,
         'tutorialSeen': tutorialSeen,
       };
 
@@ -55,6 +68,8 @@ class UserSettings {
     bool? mirrorCapture,
     bool? autoStartOnStill,
     bool? showCues,
+    bool? voiceGuideInEvaluation,
+    bool? voiceGuideInPreview,
     bool? tutorialSeen,
   }) {
     return UserSettings(
@@ -62,6 +77,9 @@ class UserSettings {
       mirrorCapture: mirrorCapture ?? this.mirrorCapture,
       autoStartOnStill: autoStartOnStill ?? this.autoStartOnStill,
       showCues: showCues ?? this.showCues,
+      voiceGuideInEvaluation:
+          voiceGuideInEvaluation ?? this.voiceGuideInEvaluation,
+      voiceGuideInPreview: voiceGuideInPreview ?? this.voiceGuideInPreview,
       tutorialSeen: tutorialSeen ?? this.tutorialSeen,
     );
   }
